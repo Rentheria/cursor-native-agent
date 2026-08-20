@@ -249,9 +249,13 @@ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 # → [dashboard] chat: off …
 
 # Con chat habilitado, prueba POST /api/chat vía curl:
+# curl sin Origin/Referer (permitido para pruebas locales):
 # curl -N -X POST http://127.0.0.1:3847/api/chat \
 #   -H 'content-type: application/json' \
 #   -d '{"prompt":"en una frase: qué es MEMORY.md"}'
+#
+# Nota: el dashboard solo acepta POSTs desde localhost/127.0.0.1
+# (Origin check). Requests de otros orígenes se rechazan con 403.
 
 # Cron (mismo entrypoint que el timer)
 ./scripts/cron-tick.sh

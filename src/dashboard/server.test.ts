@@ -191,10 +191,20 @@ describe('dashboard HTTP routes (read-only)', () => {
       },
     };
 
+    const mockServer = {
+      address() {
+        return { port: 3847, family: 'IPv4', address: '127.0.0.1' };
+      },
+    } as unknown as import('node:http').Server;
+
+    const rateLimitMap = new Map();
+
     await handleRequest(
       req,
       res as unknown as import('node:http').ServerResponse,
       { repoRoot: tmpRoot },
+      rateLimitMap,
+      mockServer,
     );
     assert.equal(res.statusCode, 200);
     assert.match(body, /"ok": true/);
@@ -383,6 +393,183 @@ describe('dashboard POST /api/chat (opt-in)', () => {
       assert.equal(res.status, 400);
       const body = (await res.json()) as { error: string };
       assert.equal(body.error, 'invalid_prompt');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_origin_externo_con_403', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'http://evil.com',
+        },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res.status, 403);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'forbidden');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_aceptar_origin_localhost_y_127.0.0.1', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
+    });
+    const baseUrl = await listen(server);
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    const port = address.port;
+    try {
+      const res1 = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': `http://127.0.0.1:${port}`,
+        },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res1.status, 200);
+
+      const res2 = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': `http://localhost:${port}`,
+        },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res2.status, 200);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_aceptar_request_sin_origin_ni_referer_(curl)', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res.status, 200);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_body_mayor_a_256KiB_con_413', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const largePrompt = 'a'.repeat(300 * 1024);
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: largePrompt }),
+      });
+      assert.equal(res.status, 413);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'payload_too_large');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_segundo_request_concurrente_con_429', async () => {
+    let firstRunning = false;
+    let firstResolve: (() => void) | undefined;
+    const firstPromise = new Promise<void>((resolve) => {
+      firstResolve = resolve;
+    });
+
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => {
+        if (!firstRunning) {
+          firstRunning = true;
+          await firstPromise;
+          return { reply: 'first', stderr: '', exitCode: 0 };
+        }
+        return { reply: 'second', stderr: '', exitCode: 0 };
+      },
+    });
+    const baseUrl = await listen(server);
+    try {
+      const first = fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'first' }),
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const second = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'second' }),
+      });
+
+      assert.equal(second.status, 429);
+      const body = (await second.json()) as { error: string };
+      assert.equal(body.error, 'too_many_requests');
+
+      firstResolve!();
+      await first;
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_después_de_exceder_rate_limit', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      for (let i = 0; i < 10; i++) {
+        const res = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: `test ${i}` }),
+        });
+        assert.equal(res.status, 200);
+        await res.text();
+      }
+
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'over limit' }),
+      });
+      assert.equal(res.status, 429);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'rate_limit_exceeded');
     } finally {
       await closeServer(server);
     }

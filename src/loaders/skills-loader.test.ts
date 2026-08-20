@@ -27,6 +27,13 @@ const mockSkills: readonly SkillDocument[] = [
     body: 'Highlight code for live demo and explain the implementation…',
     filePath: '/mock/code-spotlight.md',
   },
+  {
+    name: 'clarify-build',
+    description: 'Ask clarifying questions before building underspecified apps or projects',
+    triggers: ['build', 'create', 'develop', 'calculator', 'aplicación', 'programa', 'construye', 'crea'],
+    body: 'When the user asks to build, create, or develop an app/project/program but the request is underspecified…',
+    filePath: '/mock/clarify-build.md',
+  },
 ];
 
 describe('skills-loader', () => {
@@ -105,5 +112,59 @@ describe('skills-loader', () => {
     };
     const matched = await selectRelevantSkills('help me with code', mockSkills, options);
     assert.ok(matched.length <= 1, 'no debería devolver más de topK');
+  });
+
+  it('clarify-build_NO_debería_matchear_bare_"haz"', async () => {
+    const matched = await selectRelevantSkills('haz algo', mockSkills);
+    const names = matched.map((s) => s.name);
+    assert.ok(
+      !names.includes('clarify-build'),
+      'clarify-build no debería matchear "haz" porque fue removido de triggers',
+    );
+  });
+
+  it('clarify-build_NO_debería_matchear_bare_"make"', async () => {
+    const matched = await selectRelevantSkills('make something', mockSkills);
+    const names = matched.map((s) => s.name);
+    assert.ok(
+      !names.includes('clarify-build'),
+      'clarify-build no debería matchear "make" porque fue removido de triggers',
+    );
+  });
+
+  it('clarify-build_NO_debería_matchear_bare_"app"', async () => {
+    const matched = await selectRelevantSkills('show me the app', mockSkills);
+    const names = matched.map((s) => s.name);
+    assert.ok(
+      !names.includes('clarify-build'),
+      'clarify-build no debería matchear "app" porque fue removido de triggers',
+    );
+  });
+
+  it('clarify-build_NO_debería_matchear_bare_"project"', async () => {
+    const matched = await selectRelevantSkills('what is this project', mockSkills);
+    const names = matched.map((s) => s.name);
+    assert.ok(
+      !names.includes('clarify-build'),
+      'clarify-build no debería matchear "project" porque fue removido de triggers',
+    );
+  });
+
+  it('clarify-build_SÍ_debería_matchear_"build"', async () => {
+    const matched = await selectRelevantSkills('build a calculator', mockSkills);
+    const names = matched.map((s) => s.name);
+    assert.ok(
+      names.includes('clarify-build'),
+      'clarify-build debería matchear "build" porque está en triggers',
+    );
+  });
+
+  it('clarify-build_SÍ_debería_matchear_"create"', async () => {
+    const matched = await selectRelevantSkills('create an application', mockSkills);
+    const names = matched.map((s) => s.name);
+    assert.ok(
+      names.includes('clarify-build'),
+      'clarify-build debería matchear "create" porque está en triggers',
+    );
   });
 });
