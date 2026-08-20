@@ -1,0 +1,29 @@
+{
+  "name": "cursor-native-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native Cursor agent wrapper: skills + markdown memory orchestration around cursor-agent",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "cursor-native-agent": "./dist/core/index.js"
+  },
+  "scripts": {
+    "agent": "tsx src/core/index.ts",
+    "chat": "tsx src/core/index.ts --interactive",
+    "cron": "tsx src/orchestration/cron-tick.ts",
+    "telegram": "tsx src/channels/telegram.ts",
+    "dashboard": "tsx src/dashboard/server.ts",
+    "onboard": "tsx src/cli/onboard.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "find src -name '*.test.ts' -print0 | xargs -0 tsx --test --test-concurrency=1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+logs/
+*.log
+# Work briefs are dispatch artifacts; they live outside this repo.
+briefs/
+# User projects built by the agent
+workspace/
+!workspace/README.md
+.env
+.env.*
+!.env.example
+!.env.test.example
+.DS_Store
+*.tsbuildinfo

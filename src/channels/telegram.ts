@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  runAgentTurn,
+  type AgentTurnResult,
+} from '../core/agent-turn.js';
+import { withoutSegmentRecaps } from '../core/assistant-delta-stream.js';
+import { loadRepoEnv } from '../lib/load-env.js';
+import { maybeRunOnboarding } from '../lib/onboarding.js';
+import {
+  createTelegramApi,
+  requireTelegramBotToken,
+  type TelegramApi,
+} from './telegram-api.js';
+import {
+  describeAllowlist,
+  describeInboundSender,
+  isInboundAllowed,
+  requireTelegramAllowlist,
+  type TelegramAllowlist,
+} from './telegram-allowlist.js';
+import { createTelegramLiveReply } from './telegram-live-reply.js';
+import {
+  extractInboundTextMessages,
+  nextUpdateOffset,
+  type InboundTelegramText,
+} from './telegram-parse.js';
+
+export const DEFAULT_LONG_POLL_TIMEOUT_SECONDS = 25;
+
+export type ProcessInboundFn = (
+  inbound: InboundTelegramText,
+  onAssistantDelta: (text: string) => void,
+) => Promise<AgentTurnResult>;
+
+export interface TelegramBotOptions {
+  readonly repoRoot: string;
+  readonly api: TelegramApi;
+  /** Required: who may reach `cursor-agent` through this bot. */
+  readonly allowlist: TelegramAllowlist;
+  /** Injected for tests; defaults to `runAgentTurn` against repoRoot. */
+  readonly processInbound?: ProcessInboundFn;
+  readonly longPollTimeoutSeconds?: number;
+  /** When false, run a single getUpdates cycle then stop (tests). */
+  readonly loop?: boolean;
+  /** Starting offset for getUpdates. */
+  readonly initialOffset?: number;
+  /** Abort signal to stop the long-poll loop cleanly. */
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Handles one inbound text: runs the shared agent pipeline and replies in chat.
+ * The allowlist is enforced here, right next to the call that reaches
+ * `cursor-agent`, so no caller can route around it.
+ */
+export async function dispatchInboundMessage(params: {
+  readonly inbound: InboundTelegramText;
+  readonly api: TelegramApi;
+  readonly allowlist: TelegramAllowlist;
+  readonly processInbound: ProcessInboundFn;
+}): Promise<void> {
+  const { inbound, api, processInbound } = params;
+
+  if (!isInboundAllowed(inbound, params.allowlist)) {
+    // Stay silent towards the sender: no reply, no hint that the bot is live.
+    console.error(
+      `[telegram] Ignored message from ${describeInboundSender(inbound)} (not in allowlist)`,
+    );
+    return;
+  }
+
+  const who = inbound.fromUsername ?? String(inbound.chatId);
+  console.error(
+    `[telegram] Message from ${who} chat=${String(inbound.chatId)}: ${truncate(inbound.text, 80)}`,
+  );
+
+  const liveReply = createTelegramLiveReply({ api, chatId: inbound.chatId });
+
+  let result: AgentTurnResult;
+  try {
+    result = await processInbound(
+      inbound,
+      withoutSegmentRecaps((text) => {
+        liveReply.pushDelta(text);
+      }),
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[telegram] Agent turn failed: ${message}`);
+    await liveReply.finish(`Error running agent: ${message}`);
+    return;
+  }
+
+  if (result.stderr.trim() !== '') {
+    console.error(result.stderr.trimEnd());
+  }
+  if (result.exitCode !== 0) {
+    console.error(
+      `[telegram] cursor-agent exited with code ${String(result.exitCode)}`,
+    );
+  }
+
+  const reply =
+    result.reply.trim() !== ''
+      ? result.reply
+      : `(agent produced empty reply; exit=${String(result.exitCode)})`;
+
+  await liveReply.finish(reply);
+  console.error(
+    `[telegram] Replied to chat=${String(inbound.chatId)} (${String(reply.length)} chars)`,
+  );
+}
+
+/**
+ * Long-polls Telegram getUpdates and dispatches each text message through the
+ * same skills+memory+cursor-agent pipeline as `npm run agent`.
+ */
+export async function runTelegramBot(options: TelegramBotOptions): Promise<void> {
+  const timeout =
+    options.longPollTimeoutSeconds ?? DEFAULT_LONG_POLL_TIMEOUT_SECONDS;
+  const loop = options.loop !== false;
+  const processInbound =
+    options.processInbound ??
+    (async (inbound, onAssistantDelta) =>
+      runAgentTurn({
+        repoRoot: options.repoRoot,
+        userPrompt: inbound.text,
+        stream: true,
+        onAssistantDelta,
+      }));
+
+  let offset = options.initialOffset ?? 0;
+  console.error(
+    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}). Ctrl+C to stop.`,
+  );
+
+  do {
+    if (isAborted(options.signal)) {
+      break;
+    }
+
+    let updates;
+    try {
+      updates = await options.api.getUpdates({ offset, timeout });
+    } catch (error: unknown) {
+      if (isAborted(options.signal)) {
+        break;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[telegram] getUpdates error: ${message}`);
+      // Brief pause so a hard failure does not spin the CPU.
+      await sleep(2000, options.signal);
+      if (!loop) {
+        throw error;
+      }
+      continue;
+    }
+
+    offset = nextUpdateOffset(updates, offset);
+    const inbound = extractInboundTextMessages(updates);
+    for (const message of inbound) {
+      if (isAborted(options.signal)) {
+        break;
+      }
+      await dispatchInboundMessage({
+        inbound: message,
+        api: options.api,
+        allowlist: options.allowlist,
+        processInbound,
+      });
+    }
+  } while (loop && !isAborted(options.signal));
+
+  console.error('[telegram] Stopped.');
+}
+
+async function main(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  loadRepoEnv(repoRoot);
+  await maybeRunOnboarding({ repoRoot });
+  const token = requireTelegramBotToken(process.env);
+  const allowlist = requireTelegramAllowlist(process.env);
+  const api = createTelegramApi({ token });
+
+  const controller = new AbortController();
+  const onStop = (): void => {
+    console.error('[telegram] Shutdown signal received…');
+    controller.abort();
+  };
+  process.once('SIGINT', onStop);
+  process.once('SIGTERM', onStop);
+
+  await runTelegramBot({
+    repoRoot,
+    api,
+    allowlist,
+    signal: controller.signal,
+  });
+}
+
+function resolveRepoRoot(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, '../..');
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal !== undefined && signal.aborted;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (isAborted(signal)) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      cleanup();
+      resolve();
+    };
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+const isMain =
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[telegram] ${message}`);
+    process.exitCode = 1;
+  });
+}

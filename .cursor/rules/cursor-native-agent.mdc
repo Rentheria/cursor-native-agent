@@ -1,0 +1,112 @@
+---
+description: cursor-native-agent — arquitectura, jerarquía de autoridad y reglas duras del repo
+globs:
+alwaysApply: true
+---
+
+# cursor-native-agent — Instrucciones para agentes
+
+> Lee este archivo completo al inicio de cada sesión antes de tocar código.
+
+## 1. Qué es este proyecto
+
+Wrapper TypeScript que orquesta **skills + memoria markdown** y delega el razonamiento
+a `cursor-agent -p` (agente 100% nativo de Cursor). Demo para el Meetup GDL 27-ago-2026.
+
+- Stack: Node ≥20, TypeScript estricto, `tsx`, CLI local
+- Estado: en desarrollo (semana 2: cron + orquestación multi-agente)
+- Rama principal: `main`
+
+## 2. Jerarquía de autoridad
+
+Cuando dos fuentes contradigan, gana la de arriba:
+
+1. **Docs de este proyecto**: esta regla y `ARCHITECTURE.md`.
+2. **Tus convenciones de ingeniería internas** (si las tienes), empezando por su índice.
+3. **Docs oficiales** de TypeScript / Node / Cursor CLI.
+
+Si hay un conflicto no cubierto por los overrides de la sección 4: **detente y pregunta**.
+
+## 3. Qué guidelines cargar según la tarea
+
+Si mantienes guidelines internas, usa su tabla de ruteo. Para este repo suele bastar:
+
+| Tarea | Cargar |
+|---|---|
+| Cualquier cambio de código | principios de TypeScript estricto + claridad sobre cleverness |
+| Branches/commits/PR | Conventional Commits + ramas `tipo/descripcion` |
+| Tests | runners en serie (`--runInBand` / `--test-concurrency=1`) |
+
+## 4. Overrides de este proyecto
+
+- **main como rama principal:** este repo es el demo del meetup (27-ago-2026).
+  Los hitos de semana (documentados en `ARCHITECTURE.md`) piden entrega
+  verificable en `main`. Se trabaja en ramas `tipo/descripcion` y se integra a
+  `main` vía PR.
+- **Commits: SÍ llevan `Co-authored-by: Cursor <cursoragent@cursor.com>`.** Aquí el motor
+  ES `cursor-agent`, y el co-author es la prueba verificable de que lo construyó Cursor
+  (2026-08-04, tras una confusión de diagnóstico sobre qué script despacha el trabajo).
+- **Branches:** solo `tipo/descripcion` (ej. `feat/skills-loader`), nunca `TICKET-numero-…`.
+- **Tests:** si hay jest/vitest/node:test, correr en serie (`--runInBand` o `--test-concurrency=1`).
+- **Motor:** todo trabajo de código en este repo se despacha directo a `cursor-agent -p`,
+  sin cadena de fallback a otros CLIs.
+
+## 5. Reglas inviolables del proyecto
+
+- El **cerebro** es siempre `cursor-agent`; este paquete solo arma contexto (skills + memoria).
+- `MEMORY.md` es el índice (siempre se carga). El detalle en `memory/*.md` es **lazy**
+  por keyword y, si no hay match literal, por similitud semántica local (TF-IDF).
+- Skills viven en `skills/*.md` (frontmatter `name` + `description`/`triggers` + cuerpo).
+- Semana 2+: cron (`npm run cron`) y multi-agente (`dispatchWorker`) están **dentro** de alcance.
+  Memoria semántica local está implementada; multi-canal y dashboard siguen fuera hasta que el hito lo pida.
+- Código/commits en inglés; docs pueden ir en español.
+
+## 6. Arquitectura skills + memoria (lectura rápida)
+
+```
+prompt usuario
+    │
+    ├─► skills-loader  — lee skills/*.md, match por triggers/keywords
+    ├─► memory-loader  — siempre MEMORY.md; detalle por keyword o semántica local
+    ├─► delegation?    — frases canónicas → dispatchWorker → 2º cursor-agent
+    └─► prompt-builder — concatena índice + detalles + skills + user prompt
+              │
+              ▼
+        cursor-agent -p "<prompt final>"
+
+cron (npm run cron)
+    │
+    ├─► git status + último commit (trigger real)
+    └─► cursor-agent -p --force --trust --mode ask
+```
+
+- Skill ejemplo: `skills/git-commit.md`, `skills/summarize-file.md`, `skills/explain-error.md`,
+  `skills/delegate-worker.md`, `skills/remember.md`, `skills/stage-pitch.md`,
+  `skills/code-spotlight.md`.
+- Memoria ejemplo: `memory/meetup-cursor-gdl.md`, `memory/agent-architecture.md`,
+  `memory/house-git-rules.md`.
+
+Diseño inspirado en patrones índice+detalle + skills cargables — **no** copiar
+código de workspaces privados; sí el patrón. Detalle largo: `ARCHITECTURE.md`.
+
+## 7. Comandos comunes
+
+```bash
+npm install
+npm run agent -- "<prompt>"   # entrypoint CLI (orquesta + cursor-agent -p)
+npm run cron                  # tick autónomo (git trigger + cursor-agent)
+npm run typecheck             # tsc --noEmit
+npm test                      # node:test en serie (--test-concurrency=1)
+```
+
+Antes de cualquier push: `npm run typecheck` + `npm test` verdes.
+
+## 8. Workflow por tarea
+
+1. Lee el ticket de despacho y `ARCHITECTURE.md` si cambia alcance.
+2. Aplica las convenciones de la sección 3 / 4.
+3. Parte de `main` actualizada; crea rama `tipo/descripcion`.
+4. Implementa por secciones; commit atómico por sección (Conventional Commits, CON
+   `Co-authored-by: Cursor <cursoragent@cursor.com>`).
+5. Corre typecheck + tests; muestra output.
+6. PR hacia `main`.

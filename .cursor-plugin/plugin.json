@@ -1,0 +1,18 @@
+{
+  "name": "cursor-native-agent",
+  "description": "Rules and skills for the cursor-native-agent demo: markdown skills + memory orchestration around cursor-agent (Meetup GDL).",
+  "version": "0.1.0",
+  "author": {
+    "name": "Rentheria",
+    "email": "rentheria.dev@gmail.com"
+  },
+  "repository": "https://github.com/Rentheria/cursor-native-agent",
+  "keywords": [
+    "cursor-agent",
+    "skills",
+    "rules",
+    "native-agent"
+  ],
+  "rules": ".cursor/rules",
+  "skills": ".cursor-plugin/skills"
+}

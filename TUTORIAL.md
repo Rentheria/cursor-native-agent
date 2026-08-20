@@ -1,0 +1,341 @@
+# Tutorial rápido — cursor-native-agent
+
+Guía corta para clonar, correr un prompt y no tropezar con los fallos que ya
+mordieron en vivo. Para el diseño completo: `README.md` y `ARCHITECTURE.md`.
+
+Outputs pegados aquí salieron de una pasada real el **2026-08-12** en este
+host (Node vía nvm, `cursor-agent` en `~/.local/bin`). Los tuyos pueden variar
+en versiones o timings; la forma de las líneas sí debe coincidir.
+
+## Requisitos previos
+
+| Pieza | Versión / nota |
+|---|---|
+| **Node.js** | ≥ 20 (probado con Node 22+) |
+| **Cursor CLI** | binario `cursor-agent` instalado |
+| **Cuenta Cursor** | sesión iniciada (`cursor-agent login`) |
+
+### 1. Instalar Cursor CLI
+
+Si aún no tienes el Cursor CLI, instálalo según tu sistema operativo:
+
+| Sistema | Comando de instalación |
+|---|---|
+| **macOS / Linux / WSL** | `curl https://cursor.com/install -fsS \| bash` |
+| **Windows PowerShell** | `irm 'https://cursor.com/install?win32=true' \| iex` |
+
+Más detalles en la [documentación oficial de instalación](https://cursor.com/docs/cli/installation).
+
+El binario `cursor-agent` quedará en:
+- Unix: `~/.local/bin/cursor-agent` (o `~/.cursor/bin` según versión)
+- Windows: `%LOCALAPPDATA%\cursor-agent\cursor-agent.exe`
+
+Verifica la instalación:
+
+| Sistema | Comando |
+|---|---|
+| **macOS / Linux / WSL** | `which cursor-agent` |
+| **Windows PowerShell** | `Get-Command cursor-agent` o `where cursor-agent` |
+
+Luego verifica la versión:
+
+```bash
+cursor-agent --version
+```
+
+Salida esperada (Unix):
+
+```text
+/home/you/.local/bin/cursor-agent
+2026.08.11-e8db854
+```
+
+Salida esperada (Windows):
+
+```text
+C:\Users\you\AppData\Local\cursor-agent\cursor-agent.exe
+2026.08.11-e8db854
+```
+
+Si el comando no encuentra el binario, revisa que esté en tu `PATH`:
+- Unix: `~/.local/bin`
+- Windows: `%LOCALAPPDATA%\cursor-agent`
+
+O exporta `CURSOR_AGENT_BIN_PATH=/ruta/absoluta/a/cursor-agent` (ver `.env.example`).
+
+### 2. Iniciar sesión en Cursor
+
+El agente corre en tu cuenta de Cursor (el uso se cobra/corre en tu subscripción).
+Antes del primer prompt:
+
+```bash
+cursor-agent login
+```
+
+Abre el navegador para autenticarte. Tras confirmar, verifica:
+
+```bash
+cursor-agent status
+```
+
+Debe mostrar tu cuenta logueada.
+
+### 3. Clonar el repo
+
+El repositorio es público. Podés clonarlo directamente con HTTPS:
+
+```bash
+git clone https://github.com/Rentheria/cursor-native-agent.git
+cd cursor-native-agent
+```
+
+También podés usar el `gh` CLI si lo preferís:
+
+```bash
+gh repo clone Rentheria/cursor-native-agent
+cd cursor-native-agent
+```
+
+## Quickstart
+
+Una vez dentro del directorio clonado:
+
+```bash
+npm install
+```
+
+Salida real de `npm install` (deps ya en caché):
+
+```text
+up to date, audited 7 packages in 415ms
+
+found 0 vulnerabilities
+```
+
+Verifica que `cursor-agent` esté disponible:
+
+```bash
+which cursor-agent
+cursor-agent --version
+```
+
+```text
+/home/you/.local/bin/cursor-agent
+2026.08.11-e8db854
+```
+
+### Configuración inicial (onboarding)
+
+En el primer uso interactivo (`npm run agent`, `npm run dashboard`, `npm run cron`,
+o `npm run telegram`), el CLI pregunta la configuración básica y la guarda en `.env`:
+
+- **Modelo** (default: `composer-2.5-fast`)
+- **Puerto** del dashboard (default: `3847`, rango 1024-65535)
+- **Chat** en dashboard (default: habilitado)
+- **Workspace path**: ruta absoluta donde se construyen proyectos de usuario
+  (default: `~/Documents/cursor-native-agent` o `~/Documentos/cursor-native-agent`
+  en locales español; en Windows: `%USERPROFILE%\Documents\cursor-native-agent`)
+- **Telegram** (opcional, se deja vacío si no se usa)
+
+Presiona Enter en cada pregunta para aceptar el default. El onboarding:
+
+- Se ejecuta **una vez**: crea `.env` con el marcador `CURSOR_NATIVE_AGENT_ONBOARDED=1`.
+- **No** se ejecuta en `npm test` / `npm run typecheck` / `npm run build`.
+- Se salta en CI (variable `CI=true`), sin TTY, o si se pasa `--yes`.
+- Se puede re-ejecutar con `npm run onboard`.
+
+Ejemplo de sesión:
+
+```bash
+npm run agent -- "resume MEMORY.md"
+```
+
+```text
+=== Bienvenido a cursor-native-agent ===
+Configuración inicial. Presiona Enter para aceptar los valores por defecto.
+
+Modelo de Cursor Agent (composer-2.5-fast, auto, etc.) [composer-2.5-fast]:
+Puerto del dashboard (1024-65535) [3847]:
+Habilitar chat en el dashboard? (1=sí, 0=no) [1]:
+Ruta para proyectos de usuario (workspace) [/home/you/Documents/cursor-native-agent]:
+
+Telegram es opcional. Déjalo vacío si no lo usas ahora.
+Token del bot de Telegram (opcional) []:
+Chat IDs permitidos en Telegram, separados por comas (opcional) []:
+
+Configuración completada. Guardando en .env...
+[onboarding] Configuration saved to .env
+[onboarding] Workspace: /home/you/Documents/cursor-native-agent
+
+[agent] Loading skills…
+...
+```
+
+En ejecuciones futuras, el onboarding se salta automáticamente.
+
+Primer prompt (dispara skill + memoria):
+
+```bash
+npm run agent -- "summarize file MEMORY.md and remind me about house git rules for commits"
+```
+
+```text
+[agent] Loading skills…
+[agent] Skills loaded: 7; matched: summarize-file
+[agent] Loading memory index + relevant details…
+[agent] Memory index entries: 2; details loaded: agent-architecture, house-git-rules
+[agent] Calling cursor-agent -p …
+…
+```
+
+Si ves `matched: summarize-file` y `details loaded: …house-git-rules`, el
+orquestador está armando contexto bien. El párrafo final lo escribe
+`cursor-agent`.
+
+**Nota sobre matching de skills:** el loader intenta **primero match exacto**
+de trigger (palabras/frases completas, no subcadenas). Si ningún trigger
+matchea, **cae a semántico** (TF-IDF local sobre nombre + descripción + body de
+cada skill). Stderr loguea `matched via exact triggers` o `matched via semantic
+fallback`. Desactiva el fallback con `CURSOR_NATIVE_AGENT_SEMANTIC_SKILLS=0`.
+
+## Sobre el modelo y el billing
+
+- **Modelo por defecto:** **Composer 2.5 Fast** — pinneado en `.env.example` vía
+  `CURSOR_AGENT_MODEL=composer-2.5-fast` para tono consistente en el demo del
+  meetup (27-ago-2026). Si querés usar otro modelo, exportá
+  `CURSOR_AGENT_MODEL=<id>` en el shell o editalo en `.env`. Setealo a `auto`
+  o dejalo vacío para que cursor-agent use Auto (su default sin `--model`).
+  Lista de IDs: `cursor-agent models`.
+- **Billing:** el uso corre en tu cuenta/subscripción de Cursor. No es un
+  servicio separado; es TU agente personal corriendo sobre TU cuenta.
+
+Chequeo estático (opcional pero barato):
+
+```bash
+npm run typecheck   # tsc --noEmit → silencioso, exit 0
+npm test            # 153/153 pass (node:test, --test-concurrency=1)
+```
+
+## Workspace para proyectos de usuario
+
+Cuando le pides al agente construir algo (ej. "haz una calculadora 3D en Python"),
+el código y los artefactos van a `workspace/` — **no** en el repo del wrapper. Ese
+directorio está gitignoreado (salvo su README). Si el agente detecta un prompt de
+build underspecified, puede pedirte 2-4 aclaraciones antes de construir (lenguaje,
+UI, alcance, cómo correrlo).
+
+## Comandos principales
+
+| Comando | Qué hace | Env vars |
+|---|---|---|
+| `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (default: composer-2.5-fast), `CURSOR_NATIVE_AGENT_DEBUG=1` |
+| `npm run dashboard` | Observatorio HTTP en `127.0.0.1` (logs + MEMORY + chat) | `PORT` (default `3847`). Chat habilitado por defecto; `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para solo lectura |
+| `npm run cron` / `scripts/cron-tick.sh` | Health check real + triage en modo `ask` (Linux/macOS) | Wrapper carga nvm/`~/.local/bin`. Systemd (Linux): setea `HOME` y `PATH` (ver abajo) |
+| `npm run telegram` | Canal Telegram → mismo pipeline | **Requiere** `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` (ver `.env.example`) |
+
+Copia `.env.example` → `.env` si quieres config en un solo archivo (Unix:
+`cp .env.example .env`, Windows: `copy .env.example .env`). Las vars
+ya exportadas en el shell **no** se pisan.
+
+### Mini demos útiles
+
+```bash
+# Dashboard con chat (default)
+npm run dashboard
+# → [dashboard] chat: ENABLED (POST /api/chat)
+
+# Dashboard solo lectura (chat off)
+CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
+# → [dashboard] chat: off …
+
+# Con chat habilitado, prueba POST /api/chat vía curl:
+# curl -N -X POST http://127.0.0.1:3847/api/chat \
+#   -H 'content-type: application/json' \
+#   -d '{"prompt":"en una frase: qué es MEMORY.md"}'
+
+# Cron (mismo entrypoint que el timer)
+./scripts/cron-tick.sh
+# → [cron] Calling cursor-agent -p …
+# → === CRON FINDING … ===
+
+# Multi-agente (frase canónica)
+npm run agent -- "delega esto a un sub-agente: lista los nombres de archivos bajo skills/"
+# → Dispatching worker … / Worker finished exit=0 log=logs/workers/…
+```
+
+## Casos de fallo reales (y cómo salir)
+
+Solo incidentes verificados en este repo / host / tickets. No inventados.
+
+### 1. `HOME: unbound variable` (systemd + `cron-tick.sh`)
+
+`scripts/cron-tick.sh` arranca con `set -euo pipefail` y usa `$HOME` para nvm
+y `~/.local/bin`. Un unit de systemd **no** exporta `HOME` por defecto.
+
+Repro local (mismo fallo que muerde el timer sin `Environment=HOME=…`):
+
+```bash
+env -i PATH=/usr/bin:/bin bash --noprofile --norc -c \
+  'set -euo pipefail; export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"'
+```
+
+```text
+bash: line 1: HOME: unbound variable
+```
+
+**Fix:** en el unit, fija home y PATH absolutos (como en `README.md`):
+
+```ini
+Environment=HOME=/var/lib/cursor-native-agent
+Environment=PATH=/var/lib/cursor-native-agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/cursor-native-agent/scripts/cron-tick.sh
+```
+
+### 2. `/usr/bin/npm` no existe (nvm-only hosts)
+
+Ejemplo viejo de crontab usaba `/usr/bin/npm run cron`. En este host:
+
+```bash
+ls /usr/bin/npm
+```
+
+```text
+ls: cannot access '/usr/bin/npm': No such file or directory
+```
+
+`npm` vive bajo nvm (`~/.nvm/versions/node/…/bin/npm`). Por eso existe
+`scripts/cron-tick.sh`: carga nvm + `~/.local/bin` y luego `exec npm run cron`.
+Documentado al vivo en el commit `a8a1a3e` (*fix(cron): load nvm/PATH in
+cron-tick…*).
+
+**Fix:** crontab / systemd siempre vía el wrapper, nunca `/usr/bin/npm` a pelo.
+
+### 3. `spawn cursor-agent ENOENT` (dashboard / PATH pobre)
+
+Captura real que disparó C3PO-T2: el dashboard lanzado sin `~/.local/bin` en
+`PATH` (aunque `which cursor-agent` en la shell interactiva sí lo veía):
+
+```text
+Failed to spawn cursor-agent: spawn cursor-agent ENOENT. Is cursor-agent on PATH?
+```
+
+Tras el fix (`766d71e` + mensaje de ayuda), el error guía al override:
+
+```text
+Failed to spawn cursor-agent: spawn cursor-agent ENOENT. Is cursor-agent on PATH? Or set CURSOR_AGENT_BIN_PATH to the absolute path of the binary.
+```
+
+**Fix (elige uno):**
+
+1. Deja que el resolver encuentre `~/.local/bin/cursor-agent` (default actual), o
+2. En `.env`:
+
+```bash
+CURSOR_AGENT_BIN_PATH=/home/you/.local/bin/cursor-agent
+```
+
+## Qué no hace este tutorial
+
+No sustituye `README.md` / `ARCHITECTURE.md`. No cubre el pitch de 20 min
+(skills `stage-pitch` / `code-spotlight`). Si algo truena distinto a los tres
+casos de arriba, anota el error exacto antes de “arreglar a ciegas”.

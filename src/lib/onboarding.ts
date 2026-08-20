@@ -1,0 +1,331 @@
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output, env as processEnv } from 'node:process';
+import path from 'node:path';
+import { homedir } from 'node:os';
+
+export interface OnboardingConfig {
+  readonly CURSOR_AGENT_MODEL: string;
+  readonly PORT: string;
+  readonly CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: string;
+  readonly CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY: string;
+  readonly CURSOR_NATIVE_AGENT_SEMANTIC_TOP_K: string;
+  readonly CURSOR_NATIVE_AGENT_SEMANTIC_THRESHOLD: string;
+  readonly CURSOR_NATIVE_AGENT_EMBEDDINGS_PROVIDER: string;
+  readonly WORKSPACE_PATH: string;
+  readonly TELEGRAM_BOT_TOKEN: string;
+  readonly TELEGRAM_ALLOWED_CHAT_IDS: string;
+  readonly CURSOR_NATIVE_AGENT_DEBUG: string;
+  readonly CURSOR_NATIVE_AGENT_ONBOARDED: string;
+}
+
+export interface OnboardingOptions {
+  readonly repoRoot: string;
+  readonly skipOnboarding?: boolean;
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+const ONBOARDED_MARKER = 'CURSOR_NATIVE_AGENT_ONBOARDED';
+const SKIP_ONBOARD_ENV = 'CURSOR_NATIVE_AGENT_SKIP_ONBOARD';
+
+/**
+ * Detects the user's Documents folder, checking for Spanish "Documentos" first.
+ */
+export function detectDocumentsFolder(): string {
+  const home = homedir();
+  const documentosPath = path.join(home, 'Documentos');
+  const documentsPath = path.join(home, 'Documents');
+
+  if (existsSync(documentosPath)) {
+    return documentosPath;
+  }
+  if (existsSync(documentsPath)) {
+    return documentsPath;
+  }
+  const fallback = documentsPath;
+  mkdirSync(fallback, { recursive: true });
+  return fallback;
+}
+
+/**
+ * Returns the default workspace path: Documents/cursor-native-agent or Documentos/cursor-native-agent.
+ */
+export function getDefaultWorkspacePath(): string {
+  const docsFolder = detectDocumentsFolder();
+  return path.join(docsFolder, 'cursor-native-agent');
+}
+
+/**
+ * Checks if onboarding should be skipped.
+ * Returns true if:
+ * - skipOnboarding option is true
+ * - CURSOR_NATIVE_AGENT_SKIP_ONBOARD=1
+ * - CI environment detected
+ * - --yes flag passed
+ * - .env already exists with onboarding marker
+ * - Not a TTY (unless skipOnboarding is explicitly false, for tests)
+ */
+export function shouldSkipOnboarding(options: OnboardingOptions): boolean {
+  const env = options.env ?? processEnv;
+  const envPath = path.join(options.repoRoot, '.env');
+
+  if (options.skipOnboarding === true) {
+    return true;
+  }
+
+  if (env[SKIP_ONBOARD_ENV] === '1') {
+    return true;
+  }
+
+  if (env['CI'] === 'true' || env['CI'] === '1') {
+    return true;
+  }
+
+  if (process.argv.includes('--yes') || process.argv.includes('-y')) {
+    return true;
+  }
+
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, 'utf8');
+    if (content.includes(`${ONBOARDED_MARKER}=1`)) {
+      return true;
+    }
+  }
+
+  if (options.skipOnboarding === false) {
+    return false;
+  }
+
+  if (!input.isTTY) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Prompts the user to choose Auto or Personalizado for a setting.
+ * Returns the auto value if they choose auto (press Enter), or prompts for custom value.
+ */
+async function promptAutoOrCustom(
+  rl: ReturnType<typeof createInterface>,
+  settingName: string,
+  autoValue: string,
+  customPrompt: string,
+  validator?: (value: string) => boolean,
+): Promise<string> {
+  const choice = await rl.question(
+    `${settingName} [auto/personalizado] (Enter = auto → ${autoValue}): `,
+  );
+  const trimmed = choice.trim().toLowerCase();
+
+  if (trimmed === '' || trimmed === 'auto' || trimmed === 'a') {
+    return autoValue;
+  }
+
+  if (trimmed === 'personalizado' || trimmed === 'p') {
+    let customValue: string;
+    let valid = false;
+    while (!valid) {
+      customValue = await rl.question(`  ${customPrompt}: `);
+      customValue = customValue.trim();
+      if (!validator || validator(customValue)) {
+        return customValue;
+      }
+      console.error('  Valor inválido. Intenta de nuevo.');
+    }
+  }
+
+  return autoValue;
+}
+
+/**
+ * Expands tilde in paths and returns an absolute path.
+ */
+function expandPath(inputPath: string): string {
+  if (inputPath.startsWith('~')) {
+    return path.join(homedir(), inputPath.slice(1));
+  }
+  if (path.isAbsolute(inputPath)) {
+    return inputPath;
+  }
+  return path.resolve(inputPath);
+}
+
+/**
+ * Validates a port number is in range 1024-65535.
+ */
+function isValidPort(port: string): boolean {
+  const num = Number.parseInt(port, 10);
+  return Number.isFinite(num) && num >= 1024 && num <= 65535;
+}
+
+/**
+ * Runs the interactive onboarding flow and returns the configuration.
+ */
+export async function runInteractiveOnboarding(): Promise<OnboardingConfig> {
+  const rl = createInterface({ input, output });
+  console.error('');
+  console.error('=== Bienvenido a cursor-native-agent ===');
+  console.error('Configuración inicial. Presiona Enter para Auto o elige Personalizado.');
+  console.error('');
+
+  try {
+    const model = await promptAutoOrCustom(
+      rl,
+      'Modelo',
+      'auto',
+      'Ingresa el ID del modelo (ej. composer-2.5-fast)',
+    );
+
+    const port = await promptAutoOrCustom(
+      rl,
+      'Puerto',
+      '3847',
+      'Puerto del dashboard (1024-65535)',
+      isValidPort,
+    );
+
+    const chat = await promptAutoOrCustom(
+      rl,
+      'Chat en dashboard',
+      '1',
+      'Habilitar? (1=sí, 0=no)',
+      (value) => value === '0' || value === '1',
+    );
+
+    const workspaceDefault = getDefaultWorkspacePath();
+    let workspacePath = await promptAutoOrCustom(
+      rl,
+      'Workspace',
+      workspaceDefault,
+      'Ruta para proyectos de usuario (se expande ~)',
+    );
+    workspacePath = expandPath(workspacePath);
+
+    console.error('');
+    console.error('Telegram es opcional (Auto = omitir).');
+    const telegramChoice = await rl.question(
+      'Configurar Telegram? [auto/personalizado] (Enter = auto → omitir): ',
+    );
+    const trimmedChoice = telegramChoice.trim().toLowerCase();
+
+    let telegramToken = '';
+    let telegramChatIds = '';
+    if (trimmedChoice === 'personalizado' || trimmedChoice === 'p') {
+      telegramToken = await rl.question('  Token del bot de Telegram: ');
+      telegramToken = telegramToken.trim();
+      telegramChatIds = await rl.question('  Chat IDs permitidos (separados por comas): ');
+      telegramChatIds = telegramChatIds.trim();
+    }
+
+    console.error('');
+    console.error('Configuración completada. Guardando en .env...');
+
+    return {
+      CURSOR_AGENT_MODEL: model,
+      PORT: port,
+      CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: chat,
+      CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY: '1',
+      CURSOR_NATIVE_AGENT_SEMANTIC_TOP_K: '3',
+      CURSOR_NATIVE_AGENT_SEMANTIC_THRESHOLD: '0.12',
+      CURSOR_NATIVE_AGENT_EMBEDDINGS_PROVIDER: 'local',
+      WORKSPACE_PATH: workspacePath,
+      TELEGRAM_BOT_TOKEN: telegramToken,
+      TELEGRAM_ALLOWED_CHAT_IDS: telegramChatIds,
+      CURSOR_NATIVE_AGENT_DEBUG: '0',
+      CURSOR_NATIVE_AGENT_ONBOARDED: '1',
+    };
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Returns the default configuration without prompting (for non-interactive environments).
+ */
+export function getDefaultConfig(): OnboardingConfig {
+  return {
+    CURSOR_AGENT_MODEL: 'auto',
+    PORT: '3847',
+    CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: '1',
+    CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY: '1',
+    CURSOR_NATIVE_AGENT_SEMANTIC_TOP_K: '3',
+    CURSOR_NATIVE_AGENT_SEMANTIC_THRESHOLD: '0.12',
+    CURSOR_NATIVE_AGENT_EMBEDDINGS_PROVIDER: 'local',
+    WORKSPACE_PATH: getDefaultWorkspacePath(),
+    TELEGRAM_BOT_TOKEN: '',
+    TELEGRAM_ALLOWED_CHAT_IDS: '',
+    CURSOR_NATIVE_AGENT_DEBUG: '0',
+    CURSOR_NATIVE_AGENT_ONBOARDED: '1',
+  };
+}
+
+/**
+ * Writes the configuration to .env file.
+ */
+export function writeEnvFile(repoRoot: string, config: OnboardingConfig): void {
+  const envPath = path.join(repoRoot, '.env');
+  const lines: string[] = [
+    '# cursor-native-agent configuration',
+    '# Generated by first-run onboarding',
+    '',
+    `CURSOR_AGENT_MODEL=${config.CURSOR_AGENT_MODEL}`,
+    `PORT=${config.PORT}`,
+    `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=${config.CURSOR_NATIVE_AGENT_DASHBOARD_CHAT}`,
+    `CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY=${config.CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY}`,
+    `CURSOR_NATIVE_AGENT_SEMANTIC_TOP_K=${config.CURSOR_NATIVE_AGENT_SEMANTIC_TOP_K}`,
+    `CURSOR_NATIVE_AGENT_SEMANTIC_THRESHOLD=${config.CURSOR_NATIVE_AGENT_SEMANTIC_THRESHOLD}`,
+    `CURSOR_NATIVE_AGENT_EMBEDDINGS_PROVIDER=${config.CURSOR_NATIVE_AGENT_EMBEDDINGS_PROVIDER}`,
+    `WORKSPACE_PATH=${config.WORKSPACE_PATH}`,
+  ];
+
+  if (config.TELEGRAM_BOT_TOKEN !== '') {
+    lines.push(`TELEGRAM_BOT_TOKEN=${config.TELEGRAM_BOT_TOKEN}`);
+  }
+  if (config.TELEGRAM_ALLOWED_CHAT_IDS !== '') {
+    lines.push(`TELEGRAM_ALLOWED_CHAT_IDS=${config.TELEGRAM_ALLOWED_CHAT_IDS}`);
+  }
+
+  lines.push(`CURSOR_NATIVE_AGENT_DEBUG=${config.CURSOR_NATIVE_AGENT_DEBUG}`);
+  lines.push(`${ONBOARDED_MARKER}=${config.CURSOR_NATIVE_AGENT_ONBOARDED}`);
+  lines.push('');
+
+  writeFileSync(envPath, lines.join('\n'), 'utf8');
+}
+
+/**
+ * Ensures the workspace directory exists.
+ */
+export function ensureWorkspaceExists(workspacePath: string): void {
+  mkdirSync(workspacePath, { recursive: true });
+}
+
+/**
+ * Main onboarding entry point. Call this from product entrypoints.
+ * Returns true if onboarding ran (or was needed but skipped), false otherwise.
+ */
+export async function maybeRunOnboarding(
+  options: OnboardingOptions,
+): Promise<boolean> {
+  if (shouldSkipOnboarding(options)) {
+    return false;
+  }
+
+  let config: OnboardingConfig;
+  if (!input.isTTY) {
+    config = getDefaultConfig();
+    console.error('[onboarding] Non-interactive mode: using defaults');
+  } else {
+    config = await runInteractiveOnboarding();
+  }
+
+  writeEnvFile(options.repoRoot, config);
+  ensureWorkspaceExists(config.WORKSPACE_PATH);
+
+  console.error(`[onboarding] Configuration saved to .env`);
+  console.error(`[onboarding] Workspace: ${config.WORKSPACE_PATH}`);
+  console.error('');
+
+  return true;
+}

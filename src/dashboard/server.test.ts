@@ -1,0 +1,468 @@
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { after, before, describe, it } from 'node:test';
+
+import { escapeHtml } from './html.js';
+import {
+  DEFAULT_DASHBOARD_PORT,
+  createDashboardServer,
+  handleRequest,
+  isDashboardChatEnabled,
+  resolveDashboardPort,
+} from './server.js';
+
+describe('resolveDashboardPort', () => {
+  it('debería_usar_default_cuando_PORT_no_está', () => {
+    assert.equal(resolveDashboardPort({}), DEFAULT_DASHBOARD_PORT);
+  });
+
+  it('debería_leer_PORT_del_entorno', () => {
+    assert.equal(resolveDashboardPort({ PORT: '4090' }), 4090);
+  });
+
+  it('debería_rechazar_PORT_inválido', () => {
+    assert.throws(() => resolveDashboardPort({ PORT: 'nope' }), /Invalid PORT/);
+  });
+});
+
+describe('escapeHtml', () => {
+  it('debería_escapar_caracteres_peligrosos', () => {
+    assert.equal(
+      escapeHtml(`<script>"x"&'y'</script>`),
+      '&lt;script&gt;&quot;x&quot;&amp;&#39;y&#39;&lt;/script&gt;',
+    );
+  });
+});
+
+describe('dashboard HTTP routes (read-only)', () => {
+  let tmpRoot = '';
+  let baseUrl = '';
+  let server: ReturnType<typeof createServer> | undefined;
+
+  before(async () => {
+    tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-dash-'));
+    await mkdir(path.join(tmpRoot, 'logs'), { recursive: true });
+    await writeFile(
+      path.join(tmpRoot, 'logs/agent.ndjson'),
+      `${JSON.stringify({
+        ts: '2026-08-05T12:00:00.000Z',
+        prompt: 'hola dashboard',
+        skillsMatched: ['stage-pitch'],
+        memory: { indexEntries: 2, loadedDetails: [] },
+      })}\n`,
+      'utf8',
+    );
+    await writeFile(
+      path.join(tmpRoot, 'logs/cron.log'),
+      [
+        '=== CRON FINDING 2026-08-05T12:00:00.000Z ===',
+        'finished: 2026-08-05T12:00:08.000Z',
+        'exit:     0',
+        'branch:   feat/dashboard-web',
+        'latest:   abc1234 feat: dashboard',
+        'tree:     clean',
+        'verdict:  READY — working tree clean; safe to show on stage',
+        'note:     Dashboard fixtures look good.',
+        '===',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    await writeFile(
+      path.join(tmpRoot, 'MEMORY.md'),
+      [
+        '# MEMORY',
+        '',
+        '- [Agent architecture](memory/agent-architecture.md) — skills + MEMORY.md',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    server = createDashboardServer({ repoRoot: tmpRoot, chatEnabled: false });
+    await new Promise<void>((resolve, reject) => {
+      server!.once('error', reject);
+      server!.listen(0, '127.0.0.1', () => {
+        server!.off('error', reject);
+        resolve();
+      });
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  });
+
+  after(async () => {
+    await new Promise<void>((resolve, reject) => {
+      if (server === undefined) {
+        resolve();
+        return;
+      }
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('debería_servir_HTML_en_/_con_secciones_clave', async () => {
+    const res = await fetch(`${baseUrl}/`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/);
+    assert.equal(res.headers.get('x-dashboard-mode'), 'read-only');
+    const html = await res.text();
+    assert.match(html, /cursor-native-agent/);
+    assert.match(html, /hola dashboard/);
+    assert.match(html, /feat\/dashboard-web/);
+    assert.match(html, /Agent architecture/);
+    assert.match(html, /read-only/i);
+  });
+
+  it('debería_exponer_JSON_de_agent_cron_y_memory', async () => {
+    const agent = await fetch(`${baseUrl}/api/agent`);
+    assert.equal(agent.status, 200);
+    const agentBody = (await agent.json()) as {
+      turns: Array<{ prompt: string; skillsMatched: string[] }>;
+    };
+    assert.equal(agentBody.turns[0]?.prompt, 'hola dashboard');
+    assert.deepEqual(agentBody.turns[0]?.skillsMatched, ['stage-pitch']);
+
+    const cron = await fetch(`${baseUrl}/api/cron`);
+    assert.equal(cron.status, 200);
+    const cronBody = (await cron.json()) as {
+      findings: Array<{ branch: string; note?: string }>;
+    };
+    assert.equal(cronBody.findings[0]?.branch, 'feat/dashboard-web');
+    assert.equal(cronBody.findings[0]?.note, 'Dashboard fixtures look good.');
+
+    const memory = await fetch(`${baseUrl}/api/memory`);
+    assert.equal(memory.status, 200);
+    const memoryBody = (await memory.json()) as {
+      entries: Array<{ title: string }>;
+      indexMarkdown: string;
+    };
+    assert.equal(memoryBody.entries[0]?.title, 'Agent architecture');
+    assert.match(memoryBody.indexMarkdown, /MEMORY/);
+  });
+
+  it('debería_rechazar_métodos_que_no_sean_GET', async () => {
+    const res = await fetch(`${baseUrl}/api/agent`, { method: 'POST', body: '{}' });
+    assert.equal(res.status, 405);
+    const body = (await res.json()) as { error: string };
+    assert.equal(body.error, 'method_not_allowed');
+  });
+
+  it('debería_responder_404_en_rutas_desconocidas', async () => {
+    const res = await fetch(`${baseUrl}/api/run-agent`);
+    assert.equal(res.status, 404);
+  });
+
+  it('debería_responder_health_ok', async () => {
+    const res = await fetch(`${baseUrl}/api/health`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { ok: boolean; readOnly: boolean; chatEnabled: boolean };
+    assert.equal(body.ok, true);
+    assert.equal(body.readOnly, true);
+    assert.equal(body.chatEnabled, false);
+  });
+
+  it('debería_manejar_request_vía_handleRequest_exportado', async () => {
+    const req = {
+      method: 'GET',
+      url: '/api/health',
+    } as unknown as import('node:http').IncomingMessage;
+
+    let body = '';
+    const headers = new Map<string, string>();
+    const res = {
+      statusCode: 0,
+      setHeader(name: string, value: string | number) {
+        headers.set(name.toLowerCase(), String(value));
+      },
+      end(chunk?: string) {
+        body = chunk ?? '';
+      },
+    };
+
+    await handleRequest(
+      req,
+      res as unknown as import('node:http').ServerResponse,
+      { repoRoot: tmpRoot },
+    );
+    assert.equal(res.statusCode, 200);
+    assert.match(body, /"ok": true/);
+    assert.equal(headers.get('x-dashboard-mode'), 'read-only');
+  });
+
+  it('debería_incluir_latencias_en_/api/agent_cuando_existen', async () => {
+    await writeFile(
+      path.join(tmpRoot, 'logs/agent.ndjson'),
+      `${JSON.stringify({
+        ts: '2026-08-07T15:00:00.000Z',
+        prompt: 'timed turn',
+        skillsMatched: [],
+        memory: { indexEntries: 1, loadedDetails: [] },
+        cursorAgentMs: 7200,
+        totalMs: 10100,
+      })}\n`,
+      'utf8',
+    );
+    const res = await fetch(`${baseUrl}/api/agent`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      turns: Array<{ prompt: string; cursorAgentMs?: number; totalMs?: number }>;
+    };
+    assert.equal(body.turns[0]?.prompt, 'timed turn');
+    assert.equal(body.turns[0]?.cursorAgentMs, 7200);
+    assert.equal(body.turns[0]?.totalMs, 10100);
+  });
+});
+
+describe('isDashboardChatEnabled', () => {
+  it('debería_estar_habilitado_por_defecto', () => {
+    assert.equal(isDashboardChatEnabled({}), true);
+  });
+
+  it('debería_deshabilitarse_con_0_false_o_off', () => {
+    assert.equal(isDashboardChatEnabled({ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: '0' }), false);
+    assert.equal(isDashboardChatEnabled({ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: 'false' }), false);
+    assert.equal(isDashboardChatEnabled({ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: 'off' }), false);
+  });
+
+  it('debería_seguir_habilitado_con_1_true_o_yes', () => {
+    assert.equal(isDashboardChatEnabled({ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: '1' }), true);
+    assert.equal(isDashboardChatEnabled({ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: 'true' }), true);
+    assert.equal(isDashboardChatEnabled({ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: 'yes' }), true);
+  });
+});
+
+describe('dashboard POST /api/chat (opt-in)', () => {
+  let tmpRoot = '';
+
+  before(async () => {
+    tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-dash-chat-'));
+    await mkdir(path.join(tmpRoot, 'logs'), { recursive: true });
+  });
+
+  after(async () => {
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('debería_responder_404_cuando_chat_está_deshabilitado', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: false,
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'hola' }),
+      });
+      assert.equal(res.status, 404);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'not_found');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_streamear_respuesta_cuando_chat_está_habilitado', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async ({ onAssistantDelta }) => {
+        onAssistantDelta?.('ho');
+        onAssistantDelta?.('la');
+        return { reply: 'hola', stderr: '', exitCode: 0 };
+      },
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'di hola' }),
+      });
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+      assert.equal(res.headers.get('x-dashboard-mode'), 'chat');
+      const text = await res.text();
+      assert.match(text, /"type":"delta","text":"ho"/);
+      assert.match(text, /"type":"delta","text":"la"/);
+      assert.match(text, /"type":"done","reply":"hola"/);
+
+      const page = await fetch(`${baseUrl}/`);
+      const html = await page.text();
+      assert.match(html, /id="chat-form"/);
+      assert.match(html, /POST \/api\/chat/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_omitir_el_recap_del_segmento_en_los_deltas_SSE', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async ({ onAssistantDelta }) => {
+        // Segmento que cierra por tool call: cursor-agent lo repite completo.
+        onAssistantDelta?.('Voy a revisar ');
+        onAssistantDelta?.('el sistema.');
+        onAssistantDelta?.('Voy a revisar el sistema.');
+        return {
+          reply: 'Voy a revisar el sistema.',
+          stderr: '',
+          exitCode: 0,
+        };
+      },
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'revisa el sistema' }),
+      });
+      const deltas = collectSseDeltas(await res.text());
+
+      assert.deepEqual(deltas, ['Voy a revisar ', 'el sistema.']);
+      assert.equal(deltas.join(''), 'Voy a revisar el sistema.');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_emitir_error_SSE_cuando_el_turno_falla', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => {
+        throw new Error('boom from mock');
+      },
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'fail please' }),
+      });
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"type":"error"/);
+      assert.match(text, /boom from mock/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_prompt_vacío_con_400', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => {
+        throw new Error('should not run');
+      },
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: '   ' }),
+      });
+      assert.equal(res.status, 400);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'invalid_prompt');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_renderizar_markdown_en_la_respuesta_done', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({
+        reply: '## Título\n\n**negrita** y *cursiva*',
+        stderr: '',
+        exitCode: 0,
+      }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test markdown' }),
+      });
+      const text = await res.text();
+      const doneEvent = text
+        .split('\n')
+        .filter((line) => line.startsWith('data: '))
+        .map((line) => JSON.parse(line.slice('data: '.length)) as {
+          type: string;
+          reply?: string;
+          markdown?: string;
+        })
+        .find((event) => event.type === 'done');
+
+      assert.ok(doneEvent, 'Should have a done event');
+      assert.equal(doneEvent?.reply, '## Título\n\n**negrita** y *cursiva*');
+      assert.match(doneEvent?.markdown ?? '', /<h2>Título<\/h2>/);
+      assert.match(doneEvent?.markdown ?? '', /<strong>negrita<\/strong>/);
+      assert.match(doneEvent?.markdown ?? '', /<em>cursiva<\/em>/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
+/** Extrae el texto de los eventos SSE `delta`, en orden. */
+function collectSseDeltas(body: string): string[] {
+  return body
+    .split('\n')
+    .filter((line) => line.startsWith('data: '))
+    .map((line) => JSON.parse(line.slice('data: '.length)) as {
+      type: string;
+      text?: string;
+    })
+    .filter((event) => event.type === 'delta')
+    .map((event) => event.text ?? '');
+}
+
+async function listen(
+  server: ReturnType<typeof createServer>,
+): Promise<string> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  return `http://127.0.0.1:${String(address.port)}`;
+}
+
+async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
