@@ -482,9 +482,12 @@ npm run dashboard
 CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 ```
 
-**Seguridad:** esta ruta ejecuta prompts arbitrarios contra `cursor-agent` con
-`--force --trust` (igual que el resto del pipeline). Está pensada solo para
-`127.0.0.1` local. **No la expongas a internet sin autenticación.**
+**Seguridad:** el chat ejecuta prompts arbitrarios contra `cursor-agent` con
+`--force --trust` (igual que el resto del pipeline) y está pensado solo para
+`127.0.0.1` local. Por defecto, solo acepta POSTs desde el mismo origen del
+dashboard (localhost / 127.0.0.1); requests con origen externo se rechazan con
+403. Requests sin encabezado `Origin` (como curl) se permiten para facilitar
+pruebas locales. **No expongas este puerto a internet sin autenticación.**
 
 ## Arquitectura
 

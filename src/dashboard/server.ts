@@ -23,12 +23,19 @@ import {
 export const DEFAULT_DASHBOARD_PORT = 3847;
 export const CRON_LOG_RELATIVE_PATH = 'logs/cron.log';
 export const DASHBOARD_CHAT_ENV = 'CURSOR_NATIVE_AGENT_DASHBOARD_CHAT';
+export const MAX_JSON_BODY_BYTES = 256 * 1024;
+export const RATE_LIMIT_WINDOW_MS = 60_000;
+export const RATE_LIMIT_MAX_REQUESTS = 10;
 
 export type ChatTurnRunner = (options: {
   readonly repoRoot: string;
   readonly userPrompt: string;
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
+
+type RateLimitEntry = {
+  readonly timestamps: number[];
+};
 
 export type DashboardServerOptions = {
   readonly repoRoot: string;
@@ -41,9 +48,13 @@ export type DashboardServerOptions = {
   readonly chatEnabled?: boolean;
   /** Injected for tests; defaults to streaming `runAgentTurn`. */
   readonly runChatTurn?: ChatTurnRunner;
+  /** Override listen port for origin checks (tests only). */
+  readonly listenPort?: number;
 };
 
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD']);
+
+let chatInFlight = false;
 
 /**
  * True when dashboard chat is enabled. Enabled by default for local use;
@@ -113,15 +124,19 @@ export async function loadDashboardSnapshot(
  * Read-only by default; POST /api/chat only when chat opt-in is enabled.
  */
 export function createDashboardServer(options: DashboardServerOptions): Server {
-  return createServer((req, res) => {
-    void handleRequest(req, res, options);
+  const rateLimitMap = new Map<string, RateLimitEntry>();
+  const server = createServer((req, res) => {
+    void handleRequest(req, res, options, rateLimitMap, server);
   });
+  return server;
 }
 
 export async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
   options: DashboardServerOptions,
+  rateLimitMap: Map<string, RateLimitEntry>,
+  server: Server,
 ): Promise<void> {
   const method = req.method ?? 'GET';
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -143,7 +158,7 @@ export async function handleRequest(
       });
       return;
     }
-    await handleChatPost(req, res, options);
+    await handleChatPost(req, res, options, rateLimitMap, server);
     return;
   }
 
@@ -255,13 +270,48 @@ async function handleChatPost(
   req: IncomingMessage,
   res: ServerResponse,
   options: DashboardServerOptions,
+  rateLimitMap: Map<string, RateLimitEntry>,
+  server: Server,
 ): Promise<void> {
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null
+    ? address.port
+    : (options.listenPort ?? resolveDashboardPort());
+  if (!isOriginAllowed(req, port)) {
+    sendJson(res, 403, {
+      error: 'forbidden',
+      message: 'Cross-origin requests are not allowed. POST /api/chat only accepts requests from the local dashboard.',
+    });
+    return;
+  }
+
+  if (chatInFlight) {
+    sendJson(res, 429, {
+      error: 'too_many_requests',
+      message: 'Another chat turn is already in progress. Wait for it to finish before starting a new one.',
+    });
+    return;
+  }
+
+  const clientIp = req.socket.remoteAddress ?? 'unknown';
+  if (!checkRateLimit(clientIp, rateLimitMap)) {
+    sendJson(res, 429, {
+      error: 'rate_limit_exceeded',
+      message: `Rate limit exceeded. Maximum ${RATE_LIMIT_MAX_REQUESTS} requests per minute.`,
+    });
+    return;
+  }
+
   let body: unknown;
   try {
     body = await readJsonBody(req);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    sendJson(res, 400, { error: 'invalid_json', message });
+    if (message.includes('Body too large')) {
+      sendJson(res, 413, { error: 'payload_too_large', message });
+    } else {
+      sendJson(res, 400, { error: 'invalid_json', message });
+    }
     return;
   }
 
@@ -277,6 +327,7 @@ async function handleChatPost(
   const runChat = options.runChatTurn ?? defaultChatTurnRunner;
   beginSse(res);
 
+  chatInFlight = true;
   try {
     const result = await runChat({
       repoRoot: options.repoRoot,
@@ -297,6 +348,8 @@ async function handleChatPost(
     const message = error instanceof Error ? error.message : String(error);
     writeSseEvent(res, { type: 'error', message });
     res.end();
+  } finally {
+    chatInFlight = false;
   }
 }
 
@@ -345,14 +398,72 @@ function extractMarkdownText(body: unknown): string | undefined {
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let totalSize = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalSize += buffer.length;
+    if (totalSize > MAX_JSON_BODY_BYTES) {
+      throw new Error(`Body too large. Maximum allowed: ${MAX_JSON_BODY_BYTES} bytes (256 KiB).`);
+    }
+    chunks.push(buffer);
   }
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (raw === '') {
     return {};
   }
   return JSON.parse(raw) as unknown;
+}
+
+function isOriginAllowed(req: IncomingMessage, port: number): boolean {
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  
+  if (origin === undefined && referer === undefined) {
+    return true;
+  }
+  
+  const allowedOrigins = [
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`,
+  ];
+  
+  if (origin !== undefined) {
+    return allowedOrigins.includes(origin);
+  }
+  
+  if (referer !== undefined) {
+    try {
+      const refererUrl = new URL(referer);
+      const refererOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
+      return allowedOrigins.includes(refererOrigin);
+    } catch {
+      return false;
+    }
+  }
+  
+  return false;
+}
+
+function checkRateLimit(clientId: string, rateLimitMap: Map<string, RateLimitEntry>): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(clientId);
+  
+  if (entry === undefined) {
+    rateLimitMap.set(clientId, { timestamps: [now] });
+    return true;
+  }
+  
+  const recentTimestamps = entry.timestamps.filter(
+    (ts) => now - ts < RATE_LIMIT_WINDOW_MS
+  );
+  
+  if (recentTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+  
+  recentTimestamps.push(now);
+  rateLimitMap.set(clientId, { timestamps: recentTimestamps });
+  return true;
 }
 
 async function readFileOptional(filePath: string): Promise<string> {

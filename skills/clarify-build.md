@@ -1,7 +1,7 @@
 ---
 name: clarify-build
 description: Ask clarifying questions before building underspecified apps or projects
-triggers: haz, make, build, create, develop, calculator, app, project, aplicación, programa, construye, crea
+triggers: build, create, develop, calculator, aplicación, programa, construye, crea
 ---
 
 # Skill: clarify-build
