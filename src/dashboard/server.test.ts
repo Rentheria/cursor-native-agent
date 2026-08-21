@@ -612,6 +612,61 @@ describe('dashboard POST /api/chat (opt-in)', () => {
       await closeServer(server);
     }
   });
+
+  it('debería_emitir_error_SSE_cuando_cursor_agent_falla_con_exitCode_1', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({
+        reply: '',
+        stderr: 'Error line 1\nError line 2\nWorkspace Trust Required\n.../workspace\nPass --trust, --yolo, or -f if you trust this directory',
+        exitCode: 1,
+      }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test error' }),
+      });
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"type":"error"/);
+      assert.match(text, /cursor-agent exited with code 1/);
+      assert.match(text, /Workspace Trust Required/);
+      assert.doesNotMatch(text, /"type":"done"/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_emitir_error_SSE_cuando_reply_está_vacío', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      runChatTurn: async () => ({
+        reply: '   ',
+        stderr: 'Some warning\nAnother warning',
+        exitCode: 0,
+      }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test empty reply' }),
+      });
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"type":"error"/);
+      assert.match(text, /cursor-agent returned an empty reply/);
+      assert.doesNotMatch(text, /"type":"done"/);
+    } finally {
+      await closeServer(server);
+    }
+  });
 });
 
 /** Extrae el texto de los eventos SSE `delta`, en orden. */
