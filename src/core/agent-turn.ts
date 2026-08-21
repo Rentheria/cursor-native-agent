@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { isBuildIntent } from './build-intent.js';
 import { getCannedPitch } from './canned-pitch.js';
 import { runCursorAgent, type CursorAgentRunResult } from './cursor-agent.js';
 import {
@@ -193,13 +194,14 @@ export async function runAgentTurn(
     });
 
     const workspacePath = resolveWorkspacePath(repoRoot);
-    const isBuildRequest = matchedSkills.some((skill) => skill.name === 'clarify-build');
+    const hasClarifyBuildSkill = matchedSkills.some((skill) => skill.name === 'clarify-build');
+    const isBuildRequest = hasClarifyBuildSkill || isBuildIntent(userPrompt);
     const safeMode = options.safeMode === true;
-    const useCwd = isBuildRequest ? workspacePath : repoRoot;
+    const useCwd = safeMode ? repoRoot : (isBuildRequest ? workspacePath : repoRoot);
     const useForce = !safeMode;
     const useTrust = true;
 
-    if (isBuildRequest) {
+    if (isBuildRequest && !safeMode) {
       await mkdir(workspacePath, { recursive: true });
     }
 
