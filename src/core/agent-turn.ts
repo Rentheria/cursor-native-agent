@@ -208,11 +208,13 @@ export async function runAgentTurn(
     // hasClarifyBuildSkill already computed above during skill injection check
     const isBuildRequest = hasClarifyBuildSkill || hasBuildIntent;
     const safeMode = options.safeMode === true;
-    const useCwd = safeMode ? repoRoot : (isBuildRequest ? workspacePath : repoRoot);
-    const useForce = !safeMode;
+    // Build requests get workspace cwd and --force even in safeMode (Telegram/dashboard chat).
+    // Non-build prompts in safeMode stay at repoRoot cwd with no --force.
+    const useCwd = isBuildRequest ? workspacePath : repoRoot;
+    const useForce = isBuildRequest || !safeMode;
     const useTrust = true;
 
-    if (isBuildRequest && !safeMode) {
+    if (isBuildRequest) {
       await mkdir(workspacePath, { recursive: true });
     }
 

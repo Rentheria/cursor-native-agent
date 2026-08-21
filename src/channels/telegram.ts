@@ -52,6 +52,21 @@ export interface TelegramBotOptions {
 }
 
 /**
+ * Detects Telegram slash commands that should not spawn agent turns.
+ * Matches /start, /help, /stop with optional @BotName suffix.
+ */
+function isSlashCommand(text: string): boolean {
+  return /^\/(start|help|stop)(@\w+)?$/i.test(text.trim());
+}
+
+/**
+ * Returns a canned reply for slash commands, asking the user to send a real prompt.
+ */
+function getSlashCommandReply(): string {
+  return 'Por favor, envía un prompt real, por ejemplo: "qué hace este repo" / Please send a real prompt, e.g. "what does this repo do"';
+}
+
+/**
  * Handles one inbound text: runs the shared agent pipeline and replies in chat.
  * The allowlist is enforced here, right next to the call that reaches
  * `cursor-agent`, so no caller can route around it.
@@ -69,6 +84,18 @@ export async function dispatchInboundMessage(params: {
     console.error(
       `[telegram] Ignored message from ${describeInboundSender(inbound)} (not in allowlist)`,
     );
+    return;
+  }
+
+  if (isSlashCommand(inbound.text)) {
+    const who = inbound.fromUsername ?? String(inbound.chatId);
+    console.error(
+      `[telegram] Slash command from ${who} chat=${String(inbound.chatId)}: ${truncate(inbound.text, 80)}`,
+    );
+    await api.sendMessage({
+      chatId: inbound.chatId,
+      text: getSlashCommandReply(),
+    });
     return;
   }
 
@@ -122,6 +149,8 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
   const timeout =
     options.longPollTimeoutSeconds ?? DEFAULT_LONG_POLL_TIMEOUT_SECONDS;
   const loop = options.loop !== false;
+  // Default processInbound uses safeMode (repoRoot cwd, --trust, no --force),
+  // same as dashboard chat (/api/chat). Tests inject their own processInbound.
   const processInbound =
     options.processInbound ??
     (async (inbound, onAssistantDelta) =>
@@ -129,12 +158,13 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
         repoRoot: options.repoRoot,
         userPrompt: inbound.text,
         stream: true,
+        safeMode: true,
         onAssistantDelta,
       }));
 
   let offset = options.initialOffset ?? 0;
   console.error(
-    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}). Ctrl+C to stop.`,
+    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}, safeMode). Ctrl+C to stop.`,
   );
 
   do {

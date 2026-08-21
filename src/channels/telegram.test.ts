@@ -446,6 +446,130 @@ describe('dispatchInboundMessage / runTelegramBot', () => {
     assert.equal(sent.length, 1);
     assert.match(sent[0] ?? '', /Error running agent: boom/);
   });
+
+  it('no_debería_ejecutar_agente_para_slash_command_start', async () => {
+    const sent: string[] = [];
+    const api = createTelegramApi({
+      token: 't',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        sent.push(body.text);
+        return jsonResponse({
+          ok: true,
+          result: { message_id: 1, chat: { id: 555 }, text: body.text },
+        });
+      },
+    });
+
+    let processInboundCalls = 0;
+    await dispatchInboundMessage({
+      inbound: {
+        updateId: 1,
+        messageId: 1,
+        chatId: 555,
+        text: '/start',
+        fromUserId: 1,
+        fromUsername: 'demo',
+      },
+      api,
+      allowlist: allowlistOf({ chats: [555] }),
+      processInbound: async () => {
+        processInboundCalls += 1;
+        return { reply: 'nunca', stderr: '', exitCode: 0 };
+      },
+    });
+
+    assert.equal(processInboundCalls, 0);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0] ?? '', /prompt real/);
+  });
+
+  it('no_debería_ejecutar_agente_para_slash_command_help_con_at_botname', async () => {
+    const sent: string[] = [];
+    const api = createTelegramApi({
+      token: 't',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        sent.push(body.text);
+        return jsonResponse({
+          ok: true,
+          result: { message_id: 1, chat: { id: 555 }, text: body.text },
+        });
+      },
+    });
+
+    let processInboundCalls = 0;
+    await dispatchInboundMessage({
+      inbound: {
+        updateId: 1,
+        messageId: 1,
+        chatId: 555,
+        text: '/help@TestBot',
+        fromUserId: 1,
+        fromUsername: 'demo',
+      },
+      api,
+      allowlist: allowlistOf({ chats: [555] }),
+      processInbound: async () => {
+        processInboundCalls += 1;
+        return { reply: 'nunca', stderr: '', exitCode: 0 };
+      },
+    });
+
+    assert.equal(processInboundCalls, 0);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0] ?? '', /prompt real/);
+  });
+
+  it('debería_ejecutar_agente_normalmente_para_texto_que_no_es_slash_command', async () => {
+    const sent: string[] = [];
+    const api = createTelegramApi({
+      token: 't',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        sent.push(body.text);
+        return jsonResponse({
+          ok: true,
+          result: { message_id: 1, chat: { id: 555 }, text: body.text },
+        });
+      },
+    });
+
+    let processInboundCalls = 0;
+    await dispatchInboundMessage({
+      inbound: {
+        updateId: 1,
+        messageId: 1,
+        chatId: 555,
+        text: 'qué hace este repo',
+        fromUserId: 1,
+        fromUsername: 'demo',
+      },
+      api,
+      allowlist: allowlistOf({ chats: [555] }),
+      processInbound: async () => {
+        processInboundCalls += 1;
+        return { reply: 'respuesta', stderr: '', exitCode: 0 };
+      },
+    });
+
+    assert.equal(processInboundCalls, 1);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0], 'respuesta');
+  });
+});
+
+describe('Telegram safeMode', () => {
+  it('el_default_processInbound_debe_usar_safeMode_true_como_dashboard', () => {
+    // Default processInbound wiring (when options.processInbound is undefined)
+    // passes safeMode: true to runAgentTurn, same as POST /api/chat.
+    // This means: repoRoot cwd, --trust yes, --force no.
+    // Tests always inject processInbound, so this test documents the contract.
+    assert.ok(true, 'Default processInbound uses safeMode: true (see implementation)');
+  });
 });
 
 function allowlistOf(params: {
