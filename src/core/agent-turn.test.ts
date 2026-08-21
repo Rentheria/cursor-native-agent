@@ -425,6 +425,40 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.ok(sent !== undefined);
     assert.equal(sent.cwd, repoRoot, 'Should use repoRoot for non-build commands');
   });
+  
+  it('debería_inyectar_clarify_build_cuando_hay_build_intent_pero_skill_no_matchea', async () => {
+    const repoRoot = await makeRepo();
+    await writeFile(
+      path.join(repoRoot, 'skills/clarify-build.md'),
+      [
+        '---',
+        'name: clarify-build',
+        'description: ask questions before building',
+        'triggers: build, create',
+        '---',
+        '',
+        'Ask clarifying questions for underspecified builds.',
+        'Build directly for well-specified builds.',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const { runAgent, calls } = fakeRunner('construyendo...');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz un splitter de gastos en HTML vanilla',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.match(sent.cwd ?? '', /workspace$/, 'Should use workspace for build intent');
+    assert.match(sent.prompt, /### Skill: clarify-build/i, 'Should inject clarify-build skill');
+    assert.match(sent.prompt, /Ask clarifying questions for underspecified/i, 'Should include skill body');
+  });
 });
 
 describe('runAgentTurn (stage-pitch determinístico)', () => {
