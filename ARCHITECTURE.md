@@ -106,8 +106,8 @@ El handler reutiliza `runAgentTurn` (mismo pipeline que `npm run agent` /
 Telegram) con streaming opt-in vía
 `--output-format stream-json --stream-partial-output`.
 
-**Nota de seguridad:** esta ruta ejecuta prompts en **modo seguro** (workspace
-cwd, **sin** `--force` ni `--trust`). Además aplica verificación de origen (solo
+**Nota de seguridad:** esta ruta ejecuta prompts en **modo seguro** (repoRoot
+cwd, **sin** `--force`, **con** `--trust`). Además aplica verificación de origen (solo
 `127.0.0.1`/`localhost` o solicitudes sin Referer), cap de 256 KiB en el body
 (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No exponer
 a internet sin autenticación.** CLI y Telegram sí usan `--force --trust`; cron

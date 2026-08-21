@@ -163,11 +163,11 @@ export async function runAgentTurn(
     const workspacePath = resolveWorkspacePath(repoRoot);
     const isBuildRequest = matchedSkills.some((skill) => skill.name === 'clarify-build');
     const safeMode = options.safeMode === true;
-    const useCwd = safeMode || isBuildRequest ? workspacePath : repoRoot;
+    const useCwd = isBuildRequest ? workspacePath : repoRoot;
     const useForce = !safeMode;
-    const useTrust = !safeMode;
+    const useTrust = true;
 
-    if (safeMode || isBuildRequest) {
+    if (isBuildRequest) {
       await mkdir(workspacePath, { recursive: true });
     }
 

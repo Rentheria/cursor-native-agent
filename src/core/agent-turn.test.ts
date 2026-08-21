@@ -295,7 +295,7 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.equal(entry['exitCode'], 3);
   });
 
-  it('debería_usar_workspace_y_no_force_trust_en_modo_seguro', async () => {
+  it('debería_usar_repoRoot_con_trust_y_no_force_en_modo_seguro', async () => {
     const repoRoot = await makeRepo();
     const { runAgent, calls } = fakeRunner('respuesta segura');
 
@@ -309,9 +309,9 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.equal(calls.length, 1);
     const sent = calls[0];
     assert.ok(sent !== undefined);
-    assert.match(sent.cwd ?? '', /workspace$/);
+    assert.equal(sent.cwd, repoRoot, 'Safe mode should use repoRoot as cwd');
     assert.equal(sent.force, false, 'Safe mode should not use force');
-    assert.equal(sent.trust, false, 'Safe mode should not use trust');
+    assert.equal(sent.trust, true, 'Safe mode should use trust');
     assert.equal(result.reply, 'respuesta segura');
   });
 

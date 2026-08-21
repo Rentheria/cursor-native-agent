@@ -336,6 +336,17 @@ async function handleChatPost(
         writeSseEvent(res, { type: 'delta', text });
       }),
     });
+    
+    if (result.exitCode !== 0 || result.reply.trim() === '') {
+      const stderrSnippet = result.stderr.trim().split('\n').slice(-3).join('\n');
+      const message = result.exitCode !== 0
+        ? `cursor-agent exited with code ${result.exitCode}${stderrSnippet ? `: ${stderrSnippet}` : ''}`
+        : 'cursor-agent returned an empty reply';
+      writeSseEvent(res, { type: 'error', message });
+      res.end();
+      return;
+    }
+    
     const markdown = renderMarkdown(result.reply);
     writeSseEvent(res, {
       type: 'done',
@@ -561,7 +572,7 @@ async function main(): Promise<void> {
   );
   if (chatEnabled) {
     console.error(
-      '[dashboard] chat enabled (POST /api/chat). Runs in safe mode (workspace cwd, no force/trust). Bind is 127.0.0.1 only.',
+      '[dashboard] chat enabled (POST /api/chat). Runs in safe mode (repoRoot cwd, no force, yes trust). Bind is 127.0.0.1 only.',
     );
   }
 }
