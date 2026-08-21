@@ -202,7 +202,7 @@ describe('dashboard HTTP routes (read-only)', () => {
     await handleRequest(
       req,
       res as unknown as import('node:http').ServerResponse,
-      { repoRoot: tmpRoot },
+      { repoRoot: tmpRoot, chatEnabled: false },
       rateLimitMap,
       mockServer,
     );
