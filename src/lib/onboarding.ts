@@ -174,7 +174,7 @@ export async function runInteractiveOnboarding(): Promise<OnboardingConfig> {
     const model = await promptAutoOrCustom(
       rl,
       'Modelo',
-      'auto',
+      'composer-2.5-fast',
       'Ingresa el ID del modelo (ej. composer-2.5-fast)',
     );
 
@@ -246,7 +246,7 @@ export async function runInteractiveOnboarding(): Promise<OnboardingConfig> {
  */
 export function getDefaultConfig(): OnboardingConfig {
   return {
-    CURSOR_AGENT_MODEL: 'auto',
+    CURSOR_AGENT_MODEL: 'composer-2.5-fast',
     PORT: '3847',
     CURSOR_NATIVE_AGENT_DASHBOARD_CHAT: '1',
     CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY: '1',
