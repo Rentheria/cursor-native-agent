@@ -482,8 +482,8 @@ npm run dashboard
 CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 ```
 
-**Seguridad:** el chat ejecuta prompts en **modo seguro** (workspace cwd, **sin**
-`--force` ni `--trust`). Además aplica verificación de origen (solo
+**Seguridad:** el chat ejecuta prompts en **modo seguro** (repoRoot cwd, **sin**
+`--force`, **con** `--trust`). Además aplica verificación de origen (solo
 `127.0.0.1`/`localhost` o solicitudes sin Referer), cap de 256 KiB en el body
 (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas
 este puerto a internet sin autenticación.** CLI y Telegram sí usan `--force --trust`;
@@ -557,7 +557,7 @@ npm run dashboard
         ├─► lee logs/cron.log (bloques CRON FINDING)
         ├─► lee MEMORY.md (índice)
         ├─► GET / → HTML  |  GET /api/* → JSON
-        └─► (chat habilitado por defecto; modo seguro: sin --force --trust)
+        └─► (chat habilitado por defecto; modo seguro: repoRoot cwd, sin --force, con --trust)
               POST /api/chat → runAgentTurn (SSE stream, origin check, rate limit)
               set CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 to disable
 ```
