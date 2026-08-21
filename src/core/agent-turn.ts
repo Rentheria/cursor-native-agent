@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { isBuildIntent } from './build-intent.js';
 import { getCannedPitch } from './canned-pitch.js';
 import { runCursorAgent, type CursorAgentRunResult } from './cursor-agent.js';
 import {
@@ -104,7 +105,18 @@ export async function runAgentTurn(
   try {
     console.error('[agent] Loading skills…');
     const skills = await loadAllSkills(repoRoot);
-    const matchedSkills = await selectRelevantSkills(userPrompt, skills);
+    let matchedSkills = await selectRelevantSkills(userPrompt, skills);
+    
+    // If build intent is detected but clarify-build didn't match, inject it manually
+    const hasClarifyBuildSkill = matchedSkills.some((skill) => skill.name === 'clarify-build');
+    const hasBuildIntent = isBuildIntent(userPrompt);
+    if (hasBuildIntent && !hasClarifyBuildSkill) {
+      const clarifyBuildSkill = skills.find((skill) => skill.name === 'clarify-build');
+      if (clarifyBuildSkill !== undefined) {
+        matchedSkills = [...matchedSkills, clarifyBuildSkill];
+      }
+    }
+    
     console.error(
       `[agent] Skills loaded: ${skills.length}; matched: ${
         matchedSkills.map((skill) => skill.name).join(', ') || '(none)'
@@ -193,13 +205,14 @@ export async function runAgentTurn(
     });
 
     const workspacePath = resolveWorkspacePath(repoRoot);
-    const isBuildRequest = matchedSkills.some((skill) => skill.name === 'clarify-build');
+    // hasClarifyBuildSkill already computed above during skill injection check
+    const isBuildRequest = hasClarifyBuildSkill || hasBuildIntent;
     const safeMode = options.safeMode === true;
-    const useCwd = isBuildRequest ? workspacePath : repoRoot;
+    const useCwd = safeMode ? repoRoot : (isBuildRequest ? workspacePath : repoRoot);
     const useForce = !safeMode;
     const useTrust = true;
 
-    if (isBuildRequest) {
+    if (isBuildRequest && !safeMode) {
       await mkdir(workspacePath, { recursive: true });
     }
 

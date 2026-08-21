@@ -215,11 +215,13 @@ npm test            # 246/246 pass (node:test, --test-concurrency=1)
 
 ## Workspace para proyectos de usuario
 
-Cuando le pides al agente construir algo (ej. "haz una calculadora 3D en Python"),
-el código y los artefactos van a `workspace/` — **no** en el repo del wrapper. Ese
-directorio está gitignoreado (salvo su README). Si el agente detecta un prompt de
-build underspecified, puede pedirte 2-4 aclaraciones antes de construir (lenguaje,
-UI, alcance, cómo correrlo).
+Cuando le pides al agente construir algo (ej. "haz una calculadora", "make a todo app",
+"splitter de gastos en HTML vanilla"), el código y los artefactos van a `workspace/` — **no**
+en el repo del wrapper. Ese directorio está gitignoreado (salvo su README). El agente detecta
+intención de build automáticamente por frases como "haz un/una", "make a", "build a" o nombres
+de artefactos (app, calculadora, splitter, proyecto, etc.). Si el prompt de build está
+underspecified, el agente puede pedirte 2-4 aclaraciones antes de construir (lenguaje, UI,
+alcance, cómo correrlo). Prompts bien especificados construyen directamente sin preguntar.
 
 ## Comandos principales
 

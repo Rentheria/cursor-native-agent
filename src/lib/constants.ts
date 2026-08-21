@@ -13,6 +13,10 @@ export const WORKSPACE_PATH_ENV = 'WORKSPACE_PATH';
 export const CURSOR_AGENT_PRINT_FLAG = '-p';
 export const CURSOR_AGENT_FORCE_FLAG = '--force';
 export const CURSOR_AGENT_TRUST_FLAG = '--trust';
+/** Env override for cursor-agent timeout in milliseconds. Default: 240000 (4 minutes). */
+export const CURSOR_AGENT_TIMEOUT_ENV = 'CURSOR_AGENT_TIMEOUT_MS';
+/** Default timeout for cursor-agent runs: 4 minutes. */
+export const DEFAULT_CURSOR_AGENT_TIMEOUT_MS = 240_000;
 
 /** Minimum token length when splitting description text into match keywords. */
 export const MIN_KEYWORD_LENGTH = 3;

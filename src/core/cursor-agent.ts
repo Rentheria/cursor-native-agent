@@ -8,6 +8,8 @@ import {
   CURSOR_AGENT_MODEL_ENV,
   CURSOR_AGENT_PRINT_FLAG,
   CURSOR_AGENT_TRUST_FLAG,
+  CURSOR_AGENT_TIMEOUT_ENV,
+  DEFAULT_CURSOR_AGENT_TIMEOUT_MS,
 } from '../lib/constants.js';
 import {
   formatCursorAgentSpawnError,
@@ -63,12 +65,28 @@ export async function runCursorAgent(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       cwd: options.cwd,
+      detached: true,
     });
 
     let stdout = '';
     let stderr = '';
     let lineBuffer = '';
     let streamResultText = '';
+    let finished = false;
+    
+    const timeoutMs = resolveTimeoutMs(process.env);
+    const timeoutHandle = setTimeout(() => {
+      if (!finished && child.pid !== undefined) {
+        console.error(`[cursor-agent] Timeout after ${String(timeoutMs)}ms, killing process group -${String(child.pid)}`);
+        killProcessGroup(child.pid);
+        finished = true;
+        resolve({
+          stdout: options.streamJson === true ? streamResultText : stdout,
+          stderr: stderr + '\n[cursor-agent wrapper] Timeout: killed process group after ' + String(timeoutMs) + 'ms\n',
+          exitCode: 124,
+        });
+      }
+    }, timeoutMs);
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8');
@@ -89,6 +107,8 @@ export async function runCursorAgent(
       stderr += chunk.toString('utf8');
     });
     child.on('error', (error: Error) => {
+      clearTimeout(timeoutHandle);
+      finished = true;
       reject(
         new Error(formatCursorAgentSpawnError(binary, error.message), {
           cause: error,
@@ -96,6 +116,16 @@ export async function runCursorAgent(
       );
     });
     child.on('close', (code: number | null) => {
+      if (finished) {
+        return;
+      }
+      clearTimeout(timeoutHandle);
+      finished = true;
+      
+      if (child.pid !== undefined) {
+        killProcessGroup(child.pid);
+      }
+      
       if (options.streamJson === true && lineBuffer.trim() !== '') {
         consumeStreamJsonChunk(
           '',
@@ -133,10 +163,29 @@ export async function runCursorAgentLogged(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       cwd: options.cwd,
+      detached: true,
     });
 
     let stdout = '';
     let stderr = '';
+    let finished = false;
+    
+    const timeoutMs = resolveTimeoutMs(process.env);
+    const timeoutHandle = setTimeout(() => {
+      if (!finished && child.pid !== undefined) {
+        const timeoutMsg = `\n[cursor-agent wrapper] Timeout: killed process group after ${String(timeoutMs)}ms\n`;
+        console.error(`[cursor-agent] Timeout after ${String(timeoutMs)}ms, killing process group -${String(child.pid)}`);
+        logStream.write(timeoutMsg);
+        killProcessGroup(child.pid);
+        finished = true;
+        logStream.end();
+        resolve({
+          stdout,
+          stderr: stderr + timeoutMsg,
+          exitCode: 124,
+        });
+      }
+    }, timeoutMs);
 
     const append = (chunk: Buffer, target: 'stdout' | 'stderr'): void => {
       const text = chunk.toString('utf8');
@@ -155,6 +204,8 @@ export async function runCursorAgentLogged(
       append(chunk, 'stderr');
     });
     child.on('error', (error: Error) => {
+      clearTimeout(timeoutHandle);
+      finished = true;
       logStream.end();
       reject(
         new Error(formatCursorAgentSpawnError(binary, error.message), {
@@ -163,6 +214,16 @@ export async function runCursorAgentLogged(
       );
     });
     child.on('close', (code: number | null) => {
+      if (finished) {
+        return;
+      }
+      clearTimeout(timeoutHandle);
+      finished = true;
+      
+      if (child.pid !== undefined) {
+        killProcessGroup(child.pid);
+      }
+      
       logStream.end();
       resolve({
         stdout,
@@ -207,6 +268,23 @@ function resolveModelArg(env: NodeJS.ProcessEnv): string | undefined {
     return undefined;
   }
   return raw;
+}
+
+function resolveTimeoutMs(env: NodeJS.ProcessEnv): number {
+  const raw = env[CURSOR_AGENT_TIMEOUT_ENV]?.trim();
+  if (raw === undefined || raw === '') {
+    return DEFAULT_CURSOR_AGENT_TIMEOUT_MS;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) || parsed <= 0 ? DEFAULT_CURSOR_AGENT_TIMEOUT_MS : parsed;
+}
+
+function killProcessGroup(pid: number): void {
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch (error: unknown) {
+    console.error(`[cursor-agent] Failed to kill process group -${String(pid)}:`, error);
+  }
 }
 
 function consumeStreamJsonChunk(
