@@ -295,13 +295,13 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.equal(entry['exitCode'], 3);
   });
 
-  it('debería_usar_repoRoot_con_trust_y_no_force_en_modo_seguro', async () => {
+  it('debería_usar_repoRoot_con_trust_y_no_force_en_modo_seguro_para_prompts_normales', async () => {
     const repoRoot = await makeRepo();
     const { runAgent, calls } = fakeRunner('respuesta segura');
 
     const result = await runAgentTurn({
       repoRoot,
-      userPrompt: 'construye una calculadora',
+      userPrompt: 'summarize file MEMORY.md',
       runAgent,
       safeMode: true,
     });
@@ -309,10 +309,31 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.equal(calls.length, 1);
     const sent = calls[0];
     assert.ok(sent !== undefined);
-    assert.equal(sent.cwd, repoRoot, 'Safe mode should use repoRoot as cwd');
-    assert.equal(sent.force, false, 'Safe mode should not use force');
+    assert.equal(sent.cwd, repoRoot, 'Safe mode with non-build prompt should use repoRoot as cwd');
+    assert.equal(sent.force, false, 'Safe mode with non-build prompt should not use force');
     assert.equal(sent.trust, true, 'Safe mode should use trust');
     assert.equal(result.reply, 'respuesta segura');
+  });
+
+  it('debería_usar_workspace_con_force_en_modo_seguro_cuando_hay_build_intent', async () => {
+    const repoRoot = await makeRepo();
+    const workspacePath = path.join(repoRoot, 'workspace');
+    const { runAgent, calls } = fakeRunner('calculadora creada');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora CLI en Python',
+      runAgent,
+      safeMode: true,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.equal(sent.cwd, workspacePath, 'Safe mode with build intent should use workspace as cwd');
+    assert.equal(sent.force, true, 'Safe mode with build intent should use force');
+    assert.equal(sent.trust, true, 'Safe mode should use trust');
+    assert.equal(result.reply, 'calculadora creada');
   });
 
   it('debería_usar_workspace_cuando_matchea_skill_clarify_build', async () => {
@@ -514,6 +535,22 @@ describe('runAgentTurn (stage-pitch determinístico)', () => {
     assert.match(result.reply, /\*\*Hook:\*\*/);
     assert.match(result.reply, /\*\*Proof/);
     assert.match(result.reply, /\*\*Close:\*\*/);
+    assert.equal(result.exitCode, 0);
+  });
+
+  it('debería_devolver_pitch_sin_llamar_al_modelo_incluso_en_safeMode', async () => {
+    const repoRoot = await makeRepoWithStagePitch();
+    const { runAgent, calls } = fakeRunner('nunca se llama');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'qué hace este repo',
+      runAgent,
+      safeMode: true,
+    });
+
+    assert.equal(calls.length, 0, 'Should not call cursor-agent when stage-pitch matches in safeMode');
+    assert.match(result.reply, /Agente autónomo construido/);
     assert.equal(result.exitCode, 0);
   });
 
