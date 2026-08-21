@@ -21,12 +21,32 @@ export function renderMarkdown(text: string): string {
   let codeBlockLang = '';
   let inTable = false;
   let tableRows: string[] = [];
+  let inUnorderedList = false;
+  let unorderedListItems: string[] = [];
+  let inOrderedList = false;
+  let orderedListItems: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
 
     // Code block start/end
     if (line.trim().startsWith('```')) {
+      // Flush any open list
+      if (inUnorderedList) {
+        result.push('<ul>');
+        result.push(...unorderedListItems);
+        result.push('</ul>');
+        unorderedListItems = [];
+        inUnorderedList = false;
+      }
+      if (inOrderedList) {
+        result.push('<ol>');
+        result.push(...orderedListItems);
+        result.push('</ol>');
+        orderedListItems = [];
+        inOrderedList = false;
+      }
+
       if (!inCodeBlock) {
         inCodeBlock = true;
         codeBlockLang = line.trim().slice(3).trim();
@@ -49,6 +69,22 @@ export function renderMarkdown(text: string): string {
 
     // Table detection (| col | col |)
     if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      // Flush any open list
+      if (inUnorderedList) {
+        result.push('<ul>');
+        result.push(...unorderedListItems);
+        result.push('</ul>');
+        unorderedListItems = [];
+        inUnorderedList = false;
+      }
+      if (inOrderedList) {
+        result.push('<ol>');
+        result.push(...orderedListItems);
+        result.push('</ol>');
+        orderedListItems = [];
+        inOrderedList = false;
+      }
+
       if (!inTable) {
         inTable = true;
         tableRows = [];
@@ -64,30 +100,112 @@ export function renderMarkdown(text: string): string {
 
     // Headings
     if (line.startsWith('#### ')) {
+      // Flush any open list
+      if (inUnorderedList) {
+        result.push('<ul>');
+        result.push(...unorderedListItems);
+        result.push('</ul>');
+        unorderedListItems = [];
+        inUnorderedList = false;
+      }
+      if (inOrderedList) {
+        result.push('<ol>');
+        result.push(...orderedListItems);
+        result.push('</ol>');
+        orderedListItems = [];
+        inOrderedList = false;
+      }
+
       result.push(`<h4>${renderInline(line.slice(5))}</h4>`);
       continue;
     }
     if (line.startsWith('### ')) {
+      // Flush any open list
+      if (inUnorderedList) {
+        result.push('<ul>');
+        result.push(...unorderedListItems);
+        result.push('</ul>');
+        unorderedListItems = [];
+        inUnorderedList = false;
+      }
+      if (inOrderedList) {
+        result.push('<ol>');
+        result.push(...orderedListItems);
+        result.push('</ol>');
+        orderedListItems = [];
+        inOrderedList = false;
+      }
+
       result.push(`<h3>${renderInline(line.slice(4))}</h3>`);
       continue;
     }
     if (line.startsWith('## ')) {
+      // Flush any open list
+      if (inUnorderedList) {
+        result.push('<ul>');
+        result.push(...unorderedListItems);
+        result.push('</ul>');
+        unorderedListItems = [];
+        inUnorderedList = false;
+      }
+      if (inOrderedList) {
+        result.push('<ol>');
+        result.push(...orderedListItems);
+        result.push('</ol>');
+        orderedListItems = [];
+        inOrderedList = false;
+      }
+
       result.push(`<h2>${renderInline(line.slice(3))}</h2>`);
       continue;
     }
 
     // Unordered list
     if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+      // Flush ordered list if open
+      if (inOrderedList) {
+        result.push('<ol>');
+        result.push(...orderedListItems);
+        result.push('</ol>');
+        orderedListItems = [];
+        inOrderedList = false;
+      }
+
       const content = line.trim().slice(2);
-      result.push(`<li>${renderInline(content)}</li>`);
+      unorderedListItems.push(`<li>${renderInline(content)}</li>`);
+      inUnorderedList = true;
       continue;
+    } else if (inUnorderedList) {
+      // Unordered list ended
+      result.push('<ul>');
+      result.push(...unorderedListItems);
+      result.push('</ul>');
+      unorderedListItems = [];
+      inUnorderedList = false;
     }
 
     // Ordered list (1. item)
     const orderedMatch = /^\d+\.\s+(.*)$/.exec(line.trim());
     if (orderedMatch !== null) {
-      result.push(`<li>${renderInline(orderedMatch[1] ?? '')}</li>`);
+      // Flush unordered list if open
+      if (inUnorderedList) {
+        result.push('<ul>');
+        result.push(...unorderedListItems);
+        result.push('</ul>');
+        unorderedListItems = [];
+        inUnorderedList = false;
+      }
+
+      orderedListItems.push(`<li>${renderInline(orderedMatch[1] ?? '')}</li>`);
+      inOrderedList = true;
       continue;
+    } else if (inOrderedList) {
+      // Ordered list ended
+      result.push('<ol>');
+      result.push(...orderedListItems);
+      result.push('</ol>');
+      orderedListItems = [];
+      inOrderedList = false;
     }
 
     // Empty line
@@ -105,6 +223,18 @@ export function renderMarkdown(text: string): string {
     result.push(renderTable(tableRows));
   }
 
+  // Close lists if still open
+  if (inUnorderedList) {
+    result.push('<ul>');
+    result.push(...unorderedListItems);
+    result.push('</ul>');
+  }
+  if (inOrderedList) {
+    result.push('<ol>');
+    result.push(...orderedListItems);
+    result.push('</ol>');
+  }
+
   return result.join('\n');
 }
 
@@ -112,20 +242,7 @@ function renderInline(text: string): string {
   let result = text;
   const tokens: Array<{ type: string; content: string; original: string }> = [];
 
-  // Extract and replace special tokens (links, bold, italic, code) with placeholders
-  // Links [text](url)
-  // Match link text (no ']'), then '(', then URL (greedy, but stop before the final ')')
-  result = result.replace(/\[([^\]]+)\]\((.+)\)/g, (match, linkText: string, url: string) => {
-    const idx = tokens.length;
-    tokens.push({
-      type: 'link',
-      content: `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`,
-      original: match,
-    });
-    return `\0LINK${idx}\0`;
-  });
-
-  // Inline code `code`
+  // Extract inline code FIRST (before links) so code wins when link syntax is inside backticks
   result = result.replace(/`(.+?)`/g, (match, code: string) => {
     const idx = tokens.length;
     tokens.push({
@@ -134,6 +251,17 @@ function renderInline(text: string): string {
       original: match,
     });
     return `\0CODE${idx}\0`;
+  });
+
+  // Links [text](url) - now extracted after inline code
+  result = result.replace(/\[([^\]]+)\]\((.+)\)/g, (match, linkText: string, url: string) => {
+    const idx = tokens.length;
+    tokens.push({
+      type: 'link',
+      content: `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`,
+      original: match,
+    });
+    return `\0LINK${idx}\0`;
   });
 
   // Bold **text**

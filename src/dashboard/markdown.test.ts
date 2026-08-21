@@ -111,4 +111,46 @@ describe('renderMarkdown', () => {
     assert.match(output, /javascript:alert\(&quot;xss&quot;\)/);
     assert.doesNotMatch(output, /<script>/);
   });
+
+  it('no_debería_filtrar_placeholders_LINK_en_código_inline', () => {
+    // Regression test: inline code should be extracted before links
+    // so placeholders never leak into output
+    const input = 'Check `[link](url)` syntax in code';
+    const output = renderMarkdown(input);
+    assert.doesNotMatch(output, /LINK\d+/);
+    assert.doesNotMatch(output, /\0/);
+    assert.match(output, /<code>\[link\]\(url\)<\/code>/);
+  });
+
+  it('debería_envolver_listas_sin_orden_en_ul', () => {
+    const input = '- item 1\n- item 2\n- item 3';
+    const output = renderMarkdown(input);
+    assert.match(output, /<ul>/);
+    assert.match(output, /<\/ul>/);
+    assert.match(output, /<li>item 1<\/li>/);
+    assert.match(output, /<li>item 2<\/li>/);
+    assert.match(output, /<li>item 3<\/li>/);
+  });
+
+  it('debería_envolver_listas_ordenadas_en_ol', () => {
+    const input = '1. first\n2. second\n3. third';
+    const output = renderMarkdown(input);
+    assert.match(output, /<ol>/);
+    assert.match(output, /<\/ol>/);
+    assert.match(output, /<li>first<\/li>/);
+    assert.match(output, /<li>second<\/li>/);
+    assert.match(output, /<li>third<\/li>/);
+  });
+
+  it('no_debería_filtrar_placeholders_en_ningún_contexto', () => {
+    const input = 'Text with `code [link](url)` and **bold [link](url)** and [real link](url)';
+    const output = renderMarkdown(input);
+    // No placeholders should leak
+    assert.doesNotMatch(output, /LINK\d+/);
+    assert.doesNotMatch(output, /CODE\d+/);
+    assert.doesNotMatch(output, /BOLD\d+/);
+    assert.doesNotMatch(output, /\0/);
+    // Code should contain literal link markdown
+    assert.match(output, /<code>code \[link\]\(url\)<\/code>/);
+  });
 });
