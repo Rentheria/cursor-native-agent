@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadRepoEnv } from '../lib/load-env.js';
-import { maybeRunOnboarding } from '../lib/onboarding.js';
+import { maybeRunOnboarding, ensureDefaultConfig } from '../lib/onboarding.js';
 import {
   isDebugEnabled,
   runAgentTurn,
@@ -18,15 +18,57 @@ import {
   type StdoutLiveReply,
 } from './stdout-live-reply.js';
 
+function showHelp(): void {
+  console.log(`
+cursor-native-agent CLI
+
+Run the Cursor-native agent with skills + memory orchestration.
+
+Usage:
+  npm run agent -- "<prompt>"              Run one-shot agent turn
+  npm run agent -- --interactive           Start interactive REPL
+  npm run agent -- -i                      Alias for --interactive
+  npm run agent -- --debug "<prompt>"      Run with debug output
+  npm run agent -- --help                  Show this help
+  npm run agent -- -h                      Alias for --help
+
+Flags:
+  --interactive, -i   Interactive REPL mode
+  --debug             Enable debug logging
+  --yes, -y           Skip onboarding prompts (use defaults)
+  --help, -h          Show this help
+
+Examples:
+  npm run agent -- "summarize MEMORY.md"
+  npm run agent -- --interactive
+  npm run agent -- --debug "explain error in logs"
+`);
+}
+
 async function main(): Promise<void> {
   const repoRoot = resolveRepoRoot();
   loadRepoEnv(repoRoot);
-  await maybeRunOnboarding({ repoRoot });
+
   const rawArgs = process.argv.slice(2);
+  
+  if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
+    showHelp();
+    return;
+  }
+
   const debug = isDebugEnabled(rawArgs);
   const args = stripDebugFlags(rawArgs);
 
-  if (args.includes('--interactive') || args.includes('-i')) {
+  const isInteractive = args.includes('--interactive') || args.includes('-i');
+  const isOneShotWithPrompt = args.length > 0 && !isInteractive;
+
+  if (isOneShotWithPrompt) {
+    ensureDefaultConfig(repoRoot);
+  } else {
+    await maybeRunOnboarding({ repoRoot });
+  }
+
+  if (isInteractive) {
     const { runRepl } = await import('./repl.js');
     await runRepl(repoRoot, { debug });
     return;

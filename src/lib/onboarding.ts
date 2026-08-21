@@ -302,6 +302,29 @@ export function ensureWorkspaceExists(workspacePath: string): void {
 }
 
 /**
+ * Ensures .env exists with default config, never prompting.
+ * Used for one-shot agent runs that should not block on interactive onboarding.
+ * Returns true if .env was written, false if it already existed.
+ */
+export function ensureDefaultConfig(repoRoot: string): boolean {
+  const envPath = path.join(repoRoot, '.env');
+  
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, 'utf8');
+    if (content.includes(`${ONBOARDED_MARKER}=1`)) {
+      return false;
+    }
+  }
+
+  const config = getDefaultConfig();
+  writeEnvFile(repoRoot, config);
+  ensureWorkspaceExists(config.WORKSPACE_PATH);
+  
+  console.error('[onboarding] Created default configuration in .env');
+  return true;
+}
+
+/**
  * Main onboarding entry point. Call this from product entrypoints.
  * Returns true if onboarding ran (or was needed but skipped), false otherwise.
  */

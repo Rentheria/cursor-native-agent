@@ -1,7 +1,7 @@
 ---
 name: stage-pitch
 description: Deliver a 30-second stage pitch of this repo for live Meetup demos
-triggers: pitch, elevator pitch, stage pitch, demo pitch, present this, pitch the repo, elevator, en escena
+triggers: pitch, elevator pitch, stage pitch, demo pitch, present this, pitch the repo, elevator, en escena, qué hace este repo, qué es este proyecto, what does this repo do, what is this project, explain this repo, explica este repo, resumen del proyecto, project summary
 ---
 
 # Skill: stage-pitch

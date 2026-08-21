@@ -10,6 +10,8 @@ export function assemblePrompt(params: {
   readonly memory: MemoryLoadResult;
 }): AssembledPrompt {
   const { userPrompt, matchedSkills, memory } = params;
+  const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
+  
   const sections: string[] = [
     '# Orchestrated context for cursor-agent',
     '',
@@ -21,6 +23,20 @@ export function assemblePrompt(params: {
     'for user-requested code.',
     '',
   ];
+
+  if (hasStagePitch) {
+    sections.push('## CRITICAL OUTPUT CONSTRAINT (stage-pitch active)');
+    sections.push('');
+    sections.push('Your reply MUST be a 30-second stage pitch with EXACTLY three beats (≤12 lines total):');
+    sections.push('1. **Hook** — one sentence: what problem this solves');
+    sections.push('2. **Proof** — three concrete pieces the audience can see live');
+    sections.push('3. **Close** — one sentence inviting them to try the repo');
+    sections.push('');
+    sections.push('Use spoken cadence, prefer bullets, no essay format. Match the user language');
+    sections.push('(Spanish question → Spanish pitch, English → English). No invented features,');
+    sections.push('no absolute home paths, no personal names.');
+    sections.push('');
+  }
 
   sections.push('## Memory index (always loaded)');
   sections.push('');
