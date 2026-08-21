@@ -62,9 +62,9 @@ export interface AgentTurnOptions {
   readonly stream?: boolean;
   readonly onAssistantDelta?: (text: string) => void;
   /**
-   * When true, use workspace directory as cwd and do not pass force/trust flags.
-   * Used by dashboard chat to avoid blindly trusting arbitrary prompts against
-   * the wrapper repo.
+   * When true, use repoRoot as cwd, do not pass --force, and pass --trust.
+   * Used by dashboard chat to avoid blindly forcing arbitrary prompts against
+   * the wrapper repo while still trusting cursor-agent's own tooling.
    */
   readonly safeMode?: boolean;
 }

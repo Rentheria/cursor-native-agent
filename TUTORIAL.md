@@ -210,7 +210,7 @@ Chequeo estático (opcional pero barato):
 
 ```bash
 npm run typecheck   # tsc --noEmit → silencioso, exit 0
-npm test            # 153/153 pass (node:test, --test-concurrency=1)
+npm test            # 246/246 pass (node:test, --test-concurrency=1)
 ```
 
 ## Workspace para proyectos de usuario

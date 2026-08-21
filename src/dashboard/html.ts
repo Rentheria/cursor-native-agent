@@ -313,7 +313,7 @@ function renderChatShell(options: {
         </div>
       </header>
       <div class="info-banner" role="status">
-        <strong>Info:</strong> chat runs in safe mode (workspace cwd, no --force/--trust).
+        <strong>Info:</strong> chat runs in safe mode (repoRoot cwd, sin <span class="mono">--force</span>, con <span class="mono">--trust</span>).
         Bound to <span class="mono">127.0.0.1</span> only.
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
@@ -1102,6 +1102,7 @@ function chatClientScript(): string {
               try { payload = JSON.parse(line.slice(6)); } catch (e) { continue; }
               if (payload.type === 'delta' && typeof payload.text === 'string') {
                 assistantEl.setAttribute('data-raw', (assistantEl.getAttribute('data-raw') || '') + payload.text);
+                assistantEl.textContent = assistantEl.getAttribute('data-raw') || '';
                 log.scrollTop = log.scrollHeight;
               } else if (payload.type === 'error' && typeof payload.message === 'string') {
                 assistantEl.className = 'chat-bubble error';
@@ -1117,10 +1118,13 @@ function chatClientScript(): string {
             }
           }
           return pump();
+        }).catch(function () {
+          throw new Error('Stream ended without done or error');
         });
       }
       return pump();
     }).catch(function (err) {
+      assistantEl.classList.remove('streaming');
       assistantEl.className = 'chat-bubble error';
       assistantEl.textContent = err && err.message ? err.message : String(err);
     }).then(function () {
