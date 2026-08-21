@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { getCannedPitch } from './canned-pitch.js';
 import { runCursorAgent, type CursorAgentRunResult } from './cursor-agent.js';
 import {
   buildTurnDebugReport,
@@ -109,6 +110,37 @@ export async function runAgentTurn(
         matchedSkills.map((skill) => skill.name).join(', ') || '(none)'
       }`,
     );
+
+    const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
+    if (hasStagePitch) {
+      console.error('[agent] stage-pitch matched: returning canned pitch (no model call)');
+      const cannedReply = getCannedPitch(userPrompt);
+      const cannedResult: AgentTurnResult = {
+        reply: cannedReply,
+        stderr: '',
+        exitCode: 0,
+      };
+      
+      const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
+      const report = buildTurnDebugReport({
+        prompt: userPrompt,
+        allSkills: skills,
+        matchedSkills,
+        memory,
+      });
+      if (debug) {
+        printTurnDebug(report);
+      }
+      await appendAgentNdjson(repoRoot, {
+        ...report,
+        cursorAgentMs: 0,
+        totalMs: Math.round(performance.now() - totalStart),
+        reply: cannedResult.reply,
+        exitCode: 0,
+      });
+      
+      return cannedResult;
+    }
 
     console.error('[agent] Loading memory index + relevant details…');
     const memory = await loadMemoryForPrompt(repoRoot, userPrompt);

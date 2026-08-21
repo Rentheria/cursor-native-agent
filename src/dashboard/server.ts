@@ -148,14 +148,14 @@ export async function handleRequest(
       sendJson(res, 404, {
         error: 'not_found',
         message: 'Chat is disabled. Remove CURSOR_NATIVE_AGENT_DASHBOARD_CHAT or unset it to enable.',
-      });
+      }, false, chatEnabled);
       return;
     }
     if (method !== 'POST') {
       sendJson(res, 405, {
         error: 'method_not_allowed',
         message: 'Use POST /api/chat with JSON body { "prompt": "..." }.',
-      });
+      }, false, chatEnabled);
       return;
     }
     await handleChatPost(req, res, options, rateLimitMap, server);
@@ -167,7 +167,7 @@ export async function handleRequest(
       sendJson(res, 405, {
         error: 'method_not_allowed',
         message: 'Use POST /api/markdown with JSON body { "text": "..." }.',
-      });
+      }, false, chatEnabled);
       return;
     }
     await handleMarkdownPost(req, res);
@@ -178,7 +178,7 @@ export async function handleRequest(
     sendJson(res, 405, {
       error: 'method_not_allowed',
       message: 'Dashboard is read-only. Only GET and HEAD are allowed.',
-    });
+    }, false, chatEnabled);
     return;
   }
 
@@ -186,19 +186,19 @@ export async function handleRequest(
     if (pathname === '/' || pathname === '/index.html') {
       const snapshot = await loadDashboardSnapshot(options);
       const html = renderDashboardHtml(snapshot);
-      sendText(res, 200, 'text/html; charset=utf-8', method === 'HEAD' ? '' : html);
+      sendText(res, 200, 'text/html; charset=utf-8', method === 'HEAD' ? '' : html, chatEnabled);
       return;
     }
 
     if (pathname === '/api/agent') {
       const snapshot = await loadDashboardSnapshot(options);
-      sendJson(res, 200, { turns: snapshot.agentTurns }, method === 'HEAD');
+      sendJson(res, 200, { turns: snapshot.agentTurns }, method === 'HEAD', chatEnabled);
       return;
     }
 
     if (pathname === '/api/cron') {
       const snapshot = await loadDashboardSnapshot(options);
-      sendJson(res, 200, { findings: snapshot.cronFindings }, method === 'HEAD');
+      sendJson(res, 200, { findings: snapshot.cronFindings }, method === 'HEAD', chatEnabled);
       return;
     }
 
@@ -212,6 +212,7 @@ export async function handleRequest(
           indexMarkdown: snapshot.memoryRaw,
         },
         method === 'HEAD',
+        chatEnabled,
       );
       return;
     }
@@ -226,6 +227,7 @@ export async function handleRequest(
           chatEnabled,
         },
         method === 'HEAD',
+        chatEnabled,
       );
       return;
     }
@@ -233,10 +235,10 @@ export async function handleRequest(
     sendJson(res, 404, {
       error: 'not_found',
       message: `No route for ${pathname}`,
-    });
+    }, false, chatEnabled);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    sendJson(res, 500, { error: 'internal_error', message });
+    sendJson(res, 500, { error: 'internal_error', message }, false, chatEnabled);
   }
 }
 
@@ -515,12 +517,13 @@ function sendJson(
   status: number,
   body: unknown,
   headOnly = false,
+  chatEnabled = false,
 ): void {
   const payload = `${JSON.stringify(body, null, 2)}\n`;
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Dashboard-Mode', 'read-only');
+  res.setHeader('X-Dashboard-Mode', chatEnabled ? 'chat' : 'read-only');
   if (headOnly) {
     res.setHeader('Content-Length', Buffer.byteLength(payload));
     res.end();
@@ -534,11 +537,12 @@ function sendText(
   status: number,
   contentType: string,
   body: string,
+  chatEnabled = false,
 ): void {
   res.statusCode = status;
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Dashboard-Mode', 'read-only');
+  res.setHeader('X-Dashboard-Mode', chatEnabled ? 'chat' : 'read-only');
   res.end(body);
 }
 

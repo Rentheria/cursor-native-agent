@@ -129,15 +129,14 @@ cursor-agent --version
 En el primer uso interactivo (`npm run agent`, `npm run dashboard`, `npm run cron`,
 o `npm run telegram`), el CLI pregunta la configuración básica y la guarda en `.env`:
 
-- **Modelo** (default: `composer-2.5-fast`)
-- **Puerto** del dashboard (default: `3847`, rango 1024-65535)
-- **Chat** en dashboard (default: habilitado)
-- **Workspace path**: ruta absoluta donde se construyen proyectos de usuario
-  (default: `~/Documents/cursor-native-agent` o `~/Documentos/cursor-native-agent`
-  en locales español; en Windows: `%USERPROFILE%\Documents\cursor-native-agent`)
-- **Telegram** (opcional, se deja vacío si no se usa)
+- **Modelo**: Elige Auto (default: `composer-2.5-fast`) o Personalizado (ingresa el ID del modelo)
+- **Puerto** del dashboard: Elige Auto (default: `3847`) o Personalizado (rango 1024-65535)
+- **Chat** en dashboard: Elige Auto (default: habilitado) o Personalizado (1=sí, 0=no)
+- **Workspace**: Elige Auto (default: `~/Documents/cursor-native-agent` o `~/Documentos/cursor-native-agent`
+  en locales español; en Windows: `%USERPROFILE%\Documents\cursor-native-agent`) o Personalizado (ingresa ruta absoluta)
+- **Telegram** (opcional, Elige Auto = omitir o Personalizado = configurar)
 
-Presiona Enter en cada pregunta para aceptar el default. El onboarding:
+Presiona Enter en cada pregunta para Auto (acepta el default). El onboarding:
 
 - Se ejecuta **una vez**: crea `.env` con el marcador `CURSOR_NATIVE_AGENT_ONBOARDED=1`.
 - **No** se ejecuta en `npm test` / `npm run typecheck` / `npm run build`.
@@ -152,16 +151,15 @@ npm run agent -- "resume MEMORY.md"
 
 ```text
 === Bienvenido a cursor-native-agent ===
-Configuración inicial. Presiona Enter para aceptar los valores por defecto.
+Configuración inicial. Presiona Enter para Auto o elige Personalizado.
 
-Modelo de Cursor Agent (composer-2.5-fast, auto, etc.) [composer-2.5-fast]:
-Puerto del dashboard (1024-65535) [3847]:
-Habilitar chat en el dashboard? (1=sí, 0=no) [1]:
-Ruta para proyectos de usuario (workspace) [/home/you/Documents/cursor-native-agent]:
+Modelo [auto/personalizado] (Enter = auto → composer-2.5-fast):
+Puerto [auto/personalizado] (Enter = auto → 3847):
+Chat en dashboard [auto/personalizado] (Enter = auto → 1):
+Workspace [auto/personalizado] (Enter = auto → /home/you/Documents/cursor-native-agent):
 
-Telegram es opcional. Déjalo vacío si no lo usas ahora.
-Token del bot de Telegram (opcional) []:
-Chat IDs permitidos en Telegram, separados por comas (opcional) []:
+Telegram es opcional (Auto = omitir).
+Configurar Telegram? [auto/personalizado] (Enter = auto → omitir):
 
 Configuración completada. Guardando en .env...
 [onboarding] Configuration saved to .env
@@ -181,7 +179,7 @@ npm run agent -- "summarize file MEMORY.md and remind me about house git rules f
 
 ```text
 [agent] Loading skills…
-[agent] Skills loaded: 7; matched: summarize-file
+[agent] Skills loaded: 8; matched: summarize-file
 [agent] Loading memory index + relevant details…
 [agent] Memory index entries: 2; details loaded: agent-architecture, house-git-rules
 [agent] Calling cursor-agent -p …
@@ -200,12 +198,11 @@ fallback`. Desactiva el fallback con `CURSOR_NATIVE_AGENT_SEMANTIC_SKILLS=0`.
 
 ## Sobre el modelo y el billing
 
-- **Modelo por defecto:** **Composer 2.5 Fast** — pinneado en `.env.example` vía
-  `CURSOR_AGENT_MODEL=composer-2.5-fast` para tono consistente en el demo del
-  meetup (27-ago-2026). Si querés usar otro modelo, exportá
-  `CURSOR_AGENT_MODEL=<id>` en el shell o editalo en `.env`. Setealo a `auto`
-  o dejalo vacío para que cursor-agent use Auto (su default sin `--model`).
-  Lista de IDs: `cursor-agent models`.
+- **Modelo por defecto:** **Composer 2.5 Fast** — el onboarding configura
+  `CURSOR_AGENT_MODEL=composer-2.5-fast` por default para tono consistente en el demo del
+  meetup (27-ago-2026). Si querés usar Auto (selección automática de modelo de Cursor),
+  seteá `CURSOR_AGENT_MODEL=auto` en el shell o editalo en `.env`. Para otros modelos,
+  exportá `CURSOR_AGENT_MODEL=<id>`. Lista de IDs: `cursor-agent models`.
 - **Billing:** el uso corre en tu cuenta/subscripción de Cursor. No es un
   servicio separado; es TU agente personal corriendo sobre TU cuenta.
 
@@ -228,7 +225,7 @@ UI, alcance, cómo correrlo).
 
 | Comando | Qué hace | Env vars |
 |---|---|---|
-| `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (default: composer-2.5-fast), `CURSOR_NATIVE_AGENT_DEBUG=1` |
+| `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (default: composer-2.5-fast; seteá a `auto` para Auto), `CURSOR_NATIVE_AGENT_DEBUG=1` |
 | `npm run dashboard` | Observatorio HTTP en `127.0.0.1` (logs + MEMORY + chat) | `PORT` (default `3847`). Chat habilitado por defecto; `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para solo lectura |
 | `npm run cron` / `scripts/cron-tick.sh` | Health check real + triage en modo `ask` (Linux/macOS) | Wrapper carga nvm/`~/.local/bin`. Systemd (Linux): setea `HOME` y `PATH` (ver abajo) |
 | `npm run telegram` | Canal Telegram → mismo pipeline | **Requiere** `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` (ver `.env.example`) |

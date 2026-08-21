@@ -347,6 +347,112 @@ describe('runAgentTurn (pipeline directo)', () => {
   });
 });
 
+describe('runAgentTurn (stage-pitch determinístico)', () => {
+  async function makeRepoWithStagePitch(): Promise<string> {
+    const repoRoot = await makeRepo();
+    await writeFile(
+      path.join(repoRoot, 'skills/stage-pitch.md'),
+      [
+        '---',
+        'name: stage-pitch',
+        'description: Deliver a 30-second stage pitch',
+        'triggers: pitch, qué hace este repo, what does this repo do',
+        '---',
+        '',
+        'Stage pitch skill body.',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    return repoRoot;
+  }
+
+  it('debería_devolver_pitch_español_sin_llamar_al_modelo', async () => {
+    const repoRoot = await makeRepoWithStagePitch();
+    const { runAgent, calls } = fakeRunner('nunca se llama');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'qué hace este repo',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 0, 'Should not call cursor-agent when stage-pitch matches');
+    assert.match(result.reply, /Agente autónomo construido/);
+    assert.match(result.reply, /\*\*Hook:\*\*/);
+    assert.match(result.reply, /\*\*Proof/);
+    assert.match(result.reply, /\*\*Close:\*\*/);
+    assert.equal(result.exitCode, 0);
+  });
+
+  it('debería_devolver_pitch_inglés_sin_llamar_al_modelo', async () => {
+    const repoRoot = await makeRepoWithStagePitch();
+    const { runAgent, calls } = fakeRunner('nunca se llama');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'what does this repo do',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 0, 'Should not call cursor-agent when stage-pitch matches');
+    assert.match(result.reply, /Autonomous agent built/);
+    assert.match(result.reply, /\*\*Hook:\*\*/);
+    assert.match(result.reply, /\*\*Proof/);
+    assert.match(result.reply, /\*\*Close:\*\*/);
+    assert.equal(result.exitCode, 0);
+  });
+
+  it('debería_tomar_path_de_pitch_incluso_si_otros_skills_matchean', async () => {
+    const repoRoot = await makeRepoWithStagePitch();
+    const { runAgent, calls } = fakeRunner('nunca se llama');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz un commit con el pitch de este repo',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 0, 'Should short-circuit even with multiple skill matches');
+    assert.match(result.reply, /Agente autónomo construido|Autonomous agent built/);
+    assert.equal(result.exitCode, 0);
+  });
+
+  it('debería_registrar_el_pitch_en_logs_agent_ndjson', async () => {
+    const repoRoot = await makeRepoWithStagePitch();
+    const { runAgent } = fakeRunner('nunca se llama');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'qué hace este repo',
+      runAgent,
+    });
+
+    const entries = await readNdjson(repoRoot);
+    assert.equal(entries.length, 1);
+    const entry = entries[0] as Record<string, unknown>;
+    assert.equal(entry['prompt'], 'qué hace este repo');
+    assert.deepEqual(entry['skillsMatched'], ['stage-pitch']);
+    assert.equal(entry['cursorAgentMs'], 0, 'Should record 0ms for cursor-agent when canned');
+    assert.match(entry['reply'] as string, /Agente autónomo construido/);
+    assert.equal(entry['exitCode'], 0);
+  });
+
+  it('prompt_sin_stage_pitch_debería_llamar_al_modelo_normalmente', async () => {
+    const repoRoot = await makeRepoWithStagePitch();
+    const { runAgent, calls } = fakeRunner('respuesta normal del agente');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'resume MEMORY.md',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 1, 'Should call cursor-agent for non-pitch prompts');
+    assert.equal(result.reply, 'respuesta normal del agente');
+  });
+});
+
 describe('runAgentTurn (delegación)', () => {
   const workerResult = {
     ref: 'worker-1',
