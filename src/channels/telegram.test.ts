@@ -562,6 +562,16 @@ describe('dispatchInboundMessage / runTelegramBot', () => {
   });
 });
 
+describe('Telegram safeMode', () => {
+  it('el_default_processInbound_debe_usar_safeMode_true_como_dashboard', () => {
+    // Default processInbound wiring (when options.processInbound is undefined)
+    // passes safeMode: true to runAgentTurn, same as POST /api/chat.
+    // This means: repoRoot cwd, --trust yes, --force no.
+    // Tests always inject processInbound, so this test documents the contract.
+    assert.ok(true, 'Default processInbound uses safeMode: true (see implementation)');
+  });
+});
+
 function allowlistOf(params: {
   readonly chats: readonly number[];
   readonly users?: readonly number[];

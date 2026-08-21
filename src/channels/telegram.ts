@@ -149,6 +149,8 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
   const timeout =
     options.longPollTimeoutSeconds ?? DEFAULT_LONG_POLL_TIMEOUT_SECONDS;
   const loop = options.loop !== false;
+  // Default processInbound uses safeMode (repoRoot cwd, --trust, no --force),
+  // same as dashboard chat (/api/chat). Tests inject their own processInbound.
   const processInbound =
     options.processInbound ??
     (async (inbound, onAssistantDelta) =>
@@ -156,12 +158,13 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
         repoRoot: options.repoRoot,
         userPrompt: inbound.text,
         stream: true,
+        safeMode: true,
         onAssistantDelta,
       }));
 
   let offset = options.initialOffset ?? 0;
   console.error(
-    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}). Ctrl+C to stop.`,
+    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}, safeMode). Ctrl+C to stop.`,
   );
 
   do {
