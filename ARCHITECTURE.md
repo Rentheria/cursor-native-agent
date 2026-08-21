@@ -82,7 +82,7 @@ Telegram (usuario) → getUpdates (long poll)
 ## Fuera de alcance para el 27 (documentado, no bloqueante)
 - WhatsApp / otros canales de Meta Business (ver sección Futuro abajo)
 - Backups automáticos
-## Dashboard web de solo lectura (observabilidad local)
+## Dashboard web (observabilidad local)
 
 `npm run dashboard` levanta un servidor HTTP nativo (`node:http`, sin
 frameworks) en `127.0.0.1` con puerto `PORT` (default `3847`). Sirve una página
@@ -93,8 +93,7 @@ HTML que muestra:
 2. Hallazgos `=== CRON FINDING … ===` de `logs/cron.log` (branch, tree, verdict, note).
 3. Índice parseado de `MEMORY.md`.
 
-Por defecto es **solo lectura**: únicamente `GET`/`HEAD`; no hay rutas que
-ejecuten el agente ni escriban archivos. JSON auxiliar en `/api/agent`,
+Por defecto **incluye chat interactivo** (habilitado): JSON auxiliar en `/api/agent`,
 `/api/cron`, `/api/memory`, `/api/health`. Código en `src/dashboard/` (parsers +
 server + HTML). Tests: parseo de logs y rutas HTTP.
 
@@ -103,15 +102,16 @@ server + HTML). Tests: parseo de logs y rutas HTTP.
 Por defecto habilitado en localhost. Con `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0`
 (o `false`/`off`) se desactiva y el dashboard queda solo lectura (no registra
 `POST /api/chat` ni muestra la UI).
-se registra `POST /api/chat` (Server-Sent Events) y una UI de chat en el HTML.
 El handler reutiliza `runAgentTurn` (mismo pipeline que `npm run agent` /
 Telegram) con streaming opt-in vía
 `--output-format stream-json --stream-partial-output`.
 
-**Nota de seguridad:** esta ruta ejecuta prompts arbitrarios contra
-`cursor-agent` con `--force --trust` (igual que el resto del pipeline). Solo
-está pensada para `127.0.0.1` local — **no exponer a internet sin
-autenticación**.
+**Nota de seguridad:** esta ruta ejecuta prompts en **modo seguro** (workspace
+cwd, **sin** `--force` ni `--trust`). Además aplica verificación de origen (solo
+`127.0.0.1`/`localhost` o solicitudes sin Referer), cap de 256 KiB en el body
+(413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No exponer
+a internet sin autenticación.** CLI y Telegram sí usan `--force --trust`; cron
+usa `--mode ask`.
 ## Implementado además del alcance mínimo
 - **Memoria semántica (embeddings locales)** — default TF-IDF + hashed
   char n-grams en `src/lib/embeddings/` (sin servicio de pago). El loader

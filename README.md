@@ -433,11 +433,11 @@ No hace falta webhook ni URL pública: Node 20+ `fetch` llama a
 WhatsApp no está implementado (requiere Meta Business + webhook HTTPS); ver
 la sección “Futuro — WhatsApp” en [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-### Dashboard de solo lectura (`npm run dashboard`)
+### Dashboard web (`npm run dashboard`)
 
 Servidor HTTP local mínimo (`node:http`, sin frameworks nuevos) para **observar**
-el agente. Por defecto incluye **chat interactivo** para localhost; desactívalo
-con `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para modo solo lectura.
+el agente. Incluye **chat interactivo habilitado por defecto** para localhost;
+desactívalo con `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para modo solo lectura.
 
 ```bash
 npm run dashboard
@@ -482,12 +482,12 @@ npm run dashboard
 CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 ```
 
-**Seguridad:** el chat ejecuta prompts arbitrarios contra `cursor-agent` con
-`--force --trust` (igual que el resto del pipeline) y está pensado solo para
-`127.0.0.1` local. Por defecto, solo acepta POSTs desde el mismo origen del
-dashboard (localhost / 127.0.0.1); requests con origen externo se rechazan con
-403. Requests sin encabezado `Origin` (como curl) se permiten para facilitar
-pruebas locales. **No expongas este puerto a internet sin autenticación.**
+**Seguridad:** el chat ejecuta prompts en **modo seguro** (workspace cwd, **sin**
+`--force` ni `--trust`). Además aplica verificación de origen (solo
+`127.0.0.1`/`localhost` o solicitudes sin Referer), cap de 256 KiB en el body
+(413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas
+este puerto a internet sin autenticación.** CLI y Telegram sí usan `--force --trust`;
+cron usa `--mode ask`.
 
 ## Arquitectura
 
@@ -548,7 +548,7 @@ npm run telegram
         └─► sendMessage → chat
 ```
 
-Dashboard (solo lectura por defecto; chat opt-in):
+Dashboard (chat habilitado por defecto; modo seguro):
 
 ```
 npm run dashboard
@@ -557,8 +557,8 @@ npm run dashboard
         ├─► lee logs/cron.log (bloques CRON FINDING)
         ├─► lee MEMORY.md (índice)
         ├─► GET / → HTML  |  GET /api/* → JSON
-        └─► (chat habilitado por defecto)
-              POST /api/chat → runAgentTurn (SSE stream)
+        └─► (chat habilitado por defecto; modo seguro: sin --force --trust)
+              POST /api/chat → runAgentTurn (SSE stream, origin check, rate limit)
               set CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 to disable
 ```
 
