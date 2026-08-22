@@ -205,6 +205,7 @@ describe('dashboard HTTP routes (read-only)', () => {
       { repoRoot: tmpRoot, chatEnabled: false },
       rateLimitMap,
       mockServer,
+      'test-secret',
     );
     assert.equal(res.statusCode, 200);
     assert.match(body, /"ok": true/);
@@ -754,7 +755,7 @@ describe('dashboard token authentication', () => {
       assert.equal(res.status, 401);
       const json = await res.json() as { error: string; message: string };
       assert.equal(json.error, 'unauthorized');
-      assert.match(json.message, /Missing or invalid dashboard token/);
+      assert.match(json.message, /Token de autenticación requerido.*\.env.*DASHBOARD_TOKEN/);
     } finally {
       await closeServer(server);
     }

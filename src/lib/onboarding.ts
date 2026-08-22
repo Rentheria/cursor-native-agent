@@ -332,8 +332,8 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
         const newToken = generateDashboardToken();
         const updatedContent = content.trimEnd() + `\nDASHBOARD_TOKEN=${newToken}\n`;
         writeFileSync(envPath, updatedContent, 'utf8');
-        console.error('[onboarding] Generated DASHBOARD_TOKEN and added to .env');
-        console.error('[onboarding] Dashboard token written to .env (open the file to see it)');
+        console.error('[onboarding] DASHBOARD_TOKEN generado y guardado en .env');
+        console.error('[onboarding] Abrí el dashboard (npm run dashboard) → http://127.0.0.1:<PORT>/ → chat funciona directo');
         return true;
       }
       return false;
@@ -348,7 +348,8 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
   }
   
   console.error('[onboarding] Created default configuration in .env');
-  console.error('[onboarding] Dashboard token written to .env (open the file to see it)');
+  console.error('[onboarding] DASHBOARD_TOKEN generado y guardado en .env');
+  console.error('[onboarding] Abrí el dashboard (npm run dashboard) → http://127.0.0.1:<PORT>/ → chat funciona directo');
   return true;
 }
 

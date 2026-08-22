@@ -139,20 +139,38 @@ found 0 vulnerabilities
 
 ✅ Setup complete!
 
-Next steps:
+🔐 Token de autenticación guardado en .env como DASHBOARD_TOKEN.
+   (No se imprime en la terminal por seguridad)
 
-  1. Try the agent with a prompt:
+Próximos pasos:
+
+  1. Probar el agente con un prompt:
      npm run agent -- "summarize file MEMORY.md"
 
-  2. Start the dashboard (includes chat):
+  2. Abrir el dashboard con chat:
      npm run dashboard
-     Then open http://127.0.0.1:3847
+     Luego abrí http://127.0.0.1:3847/
+     → Chat funciona directo; el token ya está en sesión
+     → Si borraste cookies: pegá DASHBOARD_TOKEN desde .env en "Desbloquear"
 
-  3. Optional: Configure Telegram bot
+  3. Opcional: Configurar bot de Telegram
      npm run onboard
-     (or set TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_CHAT_IDS)
+     (o exportá TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_CHAT_IDS)
 
-Learn more: README.md and TUTORIAL.md
+  4. Opcional: Instalar tick de salud semanal
+     npm run cron:install
+     (corre --check-only; notifica a Telegram solo cuando hay issues)
+
+📌 Qué debes saber:
+
+  • Dashboard solo en 127.0.0.1; chat requiere DASHBOARD_TOKEN de .env
+  • Agente corre con --trust; dashboard/Telegram piden Confirmar antes de escribir
+  • Nunca commitees .env (token, Telegram). threads/ y workspace/ están en .gitignore
+  • Telegram opcional; falla cerrado sin allowlist
+
+  Para uso personal — cada quien lo corre en su propia máquina.
+
+Más info: README.md y TUTORIAL.md
 ```
 
 Si cursor-agent no está en PATH, verás instrucciones de instalación y el

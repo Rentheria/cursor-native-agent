@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { createHmac, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +34,8 @@ export const DEFAULT_DASHBOARD_PORT = 3847;
 export const CRON_LOG_RELATIVE_PATH = 'logs/cron.log';
 export const DASHBOARD_CHAT_ENV = 'CURSOR_NATIVE_AGENT_DASHBOARD_CHAT';
 export const DASHBOARD_TOKEN_ENV = 'DASHBOARD_TOKEN';
+export const DASHBOARD_SESSION_SECRET_ENV = 'DASHBOARD_SESSION_SECRET';
+export const DASHBOARD_SESSION_COOKIE_NAME = 'cursor_agent_session';
 export const MAX_JSON_BODY_BYTES = 256 * 1024;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 export const RATE_LIMIT_MAX_REQUESTS = 10;
@@ -65,6 +68,8 @@ export type DashboardServerOptions = {
   readonly listenPort?: number;
   /** Override dashboard token for tests. */
   readonly dashboardToken?: string;
+  /** Override session secret for tests. */
+  readonly sessionSecret?: string;
 };
 
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD']);
@@ -97,6 +102,20 @@ export function resolveDashboardToken(
     return undefined;
   }
   return token.trim();
+}
+
+/**
+ * Resolves or generates the session secret for signing cookies.
+ * Uses DASHBOARD_SESSION_SECRET from env, or generates a random one.
+ */
+export function resolveSessionSecret(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const secret = env[DASHBOARD_SESSION_SECRET_ENV];
+  if (secret !== undefined && secret.trim() !== '') {
+    return secret.trim();
+  }
+  return randomBytes(32).toString('base64');
 }
 
 /** Resolves listen port from `PORT` env (default 3847). */
@@ -149,13 +168,53 @@ export async function loadDashboardSnapshot(
 }
 
 /**
+ * Signs a session cookie value with HMAC-SHA256.
+ */
+function signSessionCookie(dashboardToken: string, secret: string): string {
+  const hmac = createHmac('sha256', secret);
+  hmac.update(dashboardToken);
+  return hmac.digest('base64url');
+}
+
+/**
+ * Verifies a session cookie value against the dashboard token.
+ */
+function verifySessionCookie(cookieValue: string, dashboardToken: string, secret: string): boolean {
+  const expected = signSessionCookie(dashboardToken, secret);
+  return cookieValue === expected;
+}
+
+/**
+ * Parses cookies from Cookie header.
+ */
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  if (!cookieHeader) {
+    return {};
+  }
+  const cookies: Record<string, string> = {};
+  const parts = cookieHeader.split(';');
+  for (const part of parts) {
+    const [key, ...valueParts] = part.split('=');
+    if (key !== undefined) {
+      const trimmedKey = key.trim();
+      const value = valueParts.join('=').trim();
+      if (trimmedKey !== '' && value !== '') {
+        cookies[trimmedKey] = value;
+      }
+    }
+  }
+  return cookies;
+}
+
+/**
  * Creates an HTTP server for local observability.
  * Read-only by default; POST /api/chat only when chat opt-in is enabled.
  */
 export function createDashboardServer(options: DashboardServerOptions): Server {
   const rateLimitMap = new Map<string, RateLimitEntry>();
+  const sessionSecret = options.sessionSecret ?? resolveSessionSecret();
   const server = createServer((req, res) => {
-    void handleRequest(req, res, options, rateLimitMap, server);
+    void handleRequest(req, res, options, rateLimitMap, server, sessionSecret);
   });
   return server;
 }
@@ -166,6 +225,7 @@ export async function handleRequest(
   options: DashboardServerOptions,
   rateLimitMap: Map<string, RateLimitEntry>,
   server: Server,
+  sessionSecret: string,
 ): Promise<void> {
   const method = req.method ?? 'GET';
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -181,10 +241,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken, chatEnabled)) {
+    if (!isTokenOrSessionValid(req, requiredToken, sessionSecret, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
+        message: 'Token de autenticación requerido. Abrí el archivo .env en la raíz del proyecto y copiá el valor de DASHBOARD_TOKEN.' + (requiredToken === undefined ? ' Si no existe, ejecutá npm run setup para generar uno.' : ' Pegalo en el modal "Desbloquear" que aparece al cargar el dashboard.'),
       }, false, chatEnabled);
       return;
     }
@@ -207,10 +267,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken, chatEnabled)) {
+    if (!isTokenOrSessionValid(req, requiredToken, sessionSecret, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
+        message: 'Token de autenticación requerido. Abrí el archivo .env en la raíz del proyecto y copiá el valor de DASHBOARD_TOKEN.' + (requiredToken === undefined ? ' Si no existe, ejecutá npm run setup para generar uno.' : ' Pegalo en el modal "Desbloquear" que aparece al cargar el dashboard.'),
       }, false, chatEnabled);
       return;
     }
@@ -233,10 +293,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken, chatEnabled)) {
+    if (!isTokenOrSessionValid(req, requiredToken, sessionSecret, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
+        message: 'Token de autenticación requerido. Abrí el archivo .env en la raíz del proyecto y copiá el valor de DASHBOARD_TOKEN.' + (requiredToken === undefined ? ' Si no existe, ejecutá npm run setup para generar uno.' : ' Pegalo en el modal "Desbloquear" que aparece al cargar el dashboard.'),
       }, false, chatEnabled);
       return;
     }
@@ -260,10 +320,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken, chatEnabled)) {
+    if (!isTokenOrSessionValid(req, requiredToken, sessionSecret, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
+        message: 'Token de autenticación requerido. Abrí el archivo .env en la raíz del proyecto y copiá el valor de DASHBOARD_TOKEN.' + (requiredToken === undefined ? ' Si no existe, ejecutá npm run setup para generar uno.' : ' Pegalo en el modal "Desbloquear" que aparece al cargar el dashboard.'),
       }, false, chatEnabled);
       return;
     }
@@ -288,10 +348,10 @@ export async function handleRequest(
   }
 
   if (pathname === '/api/markdown') {
-    if (!isTokenValid(req, requiredToken, chatEnabled)) {
+    if (!isTokenOrSessionValid(req, requiredToken, sessionSecret, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
+        message: 'Token de autenticación requerido. Abrí el archivo .env en la raíz del proyecto y copiá el valor de DASHBOARD_TOKEN.' + (requiredToken === undefined ? ' Si no existe, ejecutá npm run setup para generar uno.' : ' Pegalo en el modal "Desbloquear" que aparece al cargar el dashboard.'),
       }, false, chatEnabled);
       return;
     }
@@ -318,6 +378,12 @@ export async function handleRequest(
     if (pathname === '/' || pathname === '/index.html') {
       const snapshot = await loadDashboardSnapshot(options);
       const html = renderDashboardHtml(snapshot);
+      
+      if (chatEnabled && requiredToken !== undefined && isLocalhost(req)) {
+        const sessionCookie = signSessionCookie(requiredToken, sessionSecret);
+        res.setHeader('Set-Cookie', `${DASHBOARD_SESSION_COOKIE_NAME}=${sessionCookie}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
+      }
+      
       sendText(res, 200, 'text/html; charset=utf-8', method === 'HEAD' ? '' : html, chatEnabled);
       return;
     }
@@ -844,6 +910,14 @@ function isOriginAllowed(req: IncomingMessage, port: number): boolean {
 }
 
 /**
+ * Checks if the request is from localhost (127.0.0.1 or ::1).
+ */
+function isLocalhost(req: IncomingMessage): boolean {
+  const remoteAddress = req.socket.remoteAddress;
+  return remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+}
+
+/**
  * Validates the dashboard token from the request headers.
  * Checks X-Dashboard-Token and Authorization: Bearer headers.
  * When chatEnabled is true and requiredToken is undefined, rejects all requests (401).
@@ -874,6 +948,36 @@ function isTokenValid(
     const parts = authorization.split(' ');
     if (parts.length === 2 && parts[0] === 'Bearer' && parts[1] === requiredToken) {
       return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validates the dashboard token OR session cookie.
+ * Accepts either:
+ * - Valid X-Dashboard-Token or Authorization: Bearer header, OR
+ * - Valid session cookie (signed HMAC of dashboard token)
+ * Session cookies are only issued to localhost clients.
+ */
+function isTokenOrSessionValid(
+  req: IncomingMessage,
+  requiredToken: string | undefined,
+  sessionSecret: string,
+  chatEnabled: boolean,
+): boolean {
+  if (isTokenValid(req, requiredToken, chatEnabled)) {
+    return true;
+  }
+
+  if (chatEnabled && requiredToken !== undefined) {
+    const cookieHeader = req.headers['cookie'];
+    const cookies = parseCookies(cookieHeader);
+    const sessionCookie = cookies[DASHBOARD_SESSION_COOKIE_NAME];
+    
+    if (sessionCookie !== undefined) {
+      return verifySessionCookie(sessionCookie, requiredToken, sessionSecret);
     }
   }
 
@@ -999,7 +1103,10 @@ async function main(): Promise<void> {
   );
   if (chatEnabled) {
     console.error(
-      '[dashboard] chat enabled (POST /api/chat). Runs in safe mode (repoRoot cwd, no force, yes trust). Bind is 127.0.0.1 only.',
+      '[dashboard] Chat requiere desbloqueo con DASHBOARD_TOKEN de .env. Abrí la página y usá "Desbloquear".',
+    );
+    console.error(
+      '[dashboard] Safe mode: repoRoot cwd, confirmar antes de escribir, con --trust. Solo 127.0.0.1.',
     );
   }
 }

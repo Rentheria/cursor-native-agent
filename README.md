@@ -586,7 +586,7 @@ El dashboard registra `POST /api/chat` (SSE) y muestra una caja de chat. Usa el
 mismo `runAgentTurn` que `npm run agent` / Telegram, con streaming
 (`--output-format stream-json --stream-partial-output`).
 
-**Autenticación:** El dashboard requiere un token de autenticación para acceder a las APIs de chat y conversación. El token se genera automáticamente en `npm run setup` y se guarda en `.env` como `DASHBOARD_TOKEN`. El cliente debe enviar el token usando el header `X-Dashboard-Token` o `Authorization: Bearer <token>`.
+**Autenticación:** El dashboard usa cookies de sesión HttpOnly para localhost (happy path: abrís el dashboard y funciona). El token `DASHBOARD_TOKEN` (`.env`) se usa solo para APIs fuera del navegador o si borraste cookies. Modal "Desbloquear" como fallback.
 
 ```bash
 # Chat habilitado (default):
@@ -595,6 +595,8 @@ npm run dashboard
 # Desactivar chat (solo lectura):
 CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 ```
+
+**Autenticación:** El dashboard requiere `DASHBOARD_TOKEN` (generado automáticamente en `npm run setup` y guardado en `.env`). Al abrir el dashboard desde localhost, el servidor emite una cookie de sesión HttpOnly firmada que dura 7 días. El navegador incluye esta cookie automáticamente en cada request. **Happy path: abrís el dashboard y chateás directo, sin pegar tokens.** Solo necesitás el token si borraste cookies o llamás a la API desde fuera del navegador (curl, etc.).
 
 **Seguridad y trust boundary:** Dashboard y Telegram ejecutan prompts en **modo seguro** (repoRoot cwd, `--trust`, sin `--force` hasta confirmar):
 
@@ -608,7 +610,7 @@ CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 
 CLI (`npm run agent`) conserva `--force` directo (el usuario ya tipeó el prompt en su terminal). Cron usa `--mode ask` (nunca escribe).
 
-Además, el dashboard aplica verificación de origen (solo `127.0.0.1`/`localhost`), cap de 256 KiB en el body (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas este puerto a internet sin autenticación.**
+Además, el dashboard aplica verificación de origen (solo `127.0.0.1`/`localhost`), cap de 256 KiB en el body (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas este puerto a internet sin autenticación adicional.**
 
 ## Arquitectura
 
