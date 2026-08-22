@@ -328,7 +328,7 @@ describe('runAgentTurn (pipeline directo)', () => {
     });
 
     assert.equal(calls.length, 0, 'Safe mode with build intent should NOT call agent before confirmation');
-    assert.match(result.reply, /looks like a build request/i);
+    assert.match(result.reply, /esta solicitud va a escribir archivos/i);
     assert.match(result.reply, /\/ok/);
     assert.equal(result.requiresForceConfirmation, true);
   });
@@ -798,7 +798,7 @@ describe('runAgentTurn (confirmación de --force en safeMode)', () => {
     });
 
     assert.equal(calls.length, 0, 'No debería llamar a cursor-agent antes de confirmación');
-    assert.match(result.reply, /looks like a build request/i);
+    assert.match(result.reply, /esta solicitud va a escribir archivos/i);
     assert.match(result.reply, /\/ok/);
     assert.match(result.reply, /\/no/);
     assert.equal(result.requiresForceConfirmation, true);
@@ -912,7 +912,7 @@ describe('runAgentTurn (confirmación de --force en safeMode)', () => {
     // The current message "haz una calculadora" IS a build request, so it should ask for confirmation
     assert.equal(calls.length, 0, 'Should NOT call agent before confirmation');
     assert.equal(result.requiresForceConfirmation, true);
-    assert.match(result.reply, /looks like a build request/i);
+    assert.match(result.reply, /esta solicitud va a escribir archivos/i);
   });
 });
 

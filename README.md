@@ -320,6 +320,10 @@ Personalizar schedule (p. ej. cada 30 minutos):
 CURSOR_NATIVE_AGENT_CRON_SCHEDULE="*/30 * * * *" npm run cron:install
 ```
 
+**Windows:** `cron:install` requiere `crontab` (Unix cron daemon). En Windows,
+usá WSL para instalar el cron job, o considerá Task Scheduler como alternativa
+(no implementado en este demo).
+
 Requisitos: `cron` o `cronie` instalado. Si `crontab` no existe, el script
 sale con código ≠ 0 y un mensaje claro.
 

@@ -181,10 +181,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken)) {
+    if (!isTokenValid(req, requiredToken, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
       }, false, chatEnabled);
       return;
     }
@@ -207,10 +207,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken)) {
+    if (!isTokenValid(req, requiredToken, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
       }, false, chatEnabled);
       return;
     }
@@ -233,10 +233,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken)) {
+    if (!isTokenValid(req, requiredToken, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
       }, false, chatEnabled);
       return;
     }
@@ -260,10 +260,10 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
-    if (!isTokenValid(req, requiredToken)) {
+    if (!isTokenValid(req, requiredToken, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
       }, false, chatEnabled);
       return;
     }
@@ -288,10 +288,10 @@ export async function handleRequest(
   }
 
   if (pathname === '/api/markdown') {
-    if (!isTokenValid(req, requiredToken)) {
+    if (!isTokenValid(req, requiredToken, chatEnabled)) {
       sendJson(res, 401, {
         error: 'unauthorized',
-        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.' + (requiredToken === undefined ? ' Run npm run setup to generate a token.' : ''),
       }, false, chatEnabled);
       return;
     }
@@ -846,9 +846,20 @@ function isOriginAllowed(req: IncomingMessage, port: number): boolean {
 /**
  * Validates the dashboard token from the request headers.
  * Checks X-Dashboard-Token and Authorization: Bearer headers.
- * Returns true if token is not configured (open access) or if token matches.
+ * When chatEnabled is true and requiredToken is undefined, rejects all requests (401).
+ * When chatEnabled is false or requiredToken is configured, validates normally.
  */
-function isTokenValid(req: IncomingMessage, requiredToken: string | undefined): boolean {
+function isTokenValid(
+  req: IncomingMessage,
+  requiredToken: string | undefined,
+  chatEnabled: boolean,
+): boolean {
+  // When chat is enabled but no token configured, reject all (should run setup)
+  if (chatEnabled && requiredToken === undefined) {
+    return false;
+  }
+  
+  // When chat is disabled or no token required, allow (backward compat for read-only)
   if (requiredToken === undefined) {
     return true;
   }

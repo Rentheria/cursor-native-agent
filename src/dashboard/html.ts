@@ -189,27 +189,27 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
               </li>`,
           )
           .join('\n')
-      : '<li class="empty">No index entries parsed from MEMORY.md</li>';
+      : '<li class="empty">Sin entradas de índice parseadas de MEMORY.md</li>';
 
   const agentSection = `
     <section class="panel" aria-labelledby="agent-heading">
-      <h2 id="agent-heading">Agent turns</h2>
+      <h2 id="agent-heading">Turnos del agente</h2>
       <p class="source">${escapeHtml(snapshot.sources.agentPath)} · newest ${String(snapshot.agentTurns.length)}</p>
       ${
         snapshot.agentTurns.length === 0
-          ? '<p class="empty">No entries in agent.ndjson yet.</p>'
+          ? '<p class="empty">Sin entradas en agent.ndjson todavía.</p>'
           : `<div class="turns-list">${agentRows}</div>`
       }
     </section>`;
 
   const cronSection = `
     <section class="panel" aria-labelledby="cron-heading">
-      <h2 id="cron-heading">Cron findings</h2>
+      <h2 id="cron-heading">Hallazgos de cron</h2>
       <p class="source">${escapeHtml(snapshot.sources.cronPath)} · newest ${String(snapshot.cronFindings.length)}</p>
       <div class="findings">
         ${
           snapshot.cronFindings.length === 0
-            ? '<p class="empty">No CRON FINDING blocks parsed yet.</p>'
+            ? '<p class="empty">Sin bloques CRON FINDING parseados todavía.</p>'
             : cronCards
         }
       </div>
@@ -239,7 +239,7 @@ ${memoryItems}
       });
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -304,7 +304,7 @@ function renderChatShell(options: {
         <span class="meta">observe · ${escapeHtml(options.generatedAt)}</span>
       </div>
       <nav class="sidebar-nav" aria-label="Panels">
-        <button type="button" class="side-tab is-active" data-panel="agent">Turns</button>
+        <button type="button" class="side-tab is-active" data-panel="agent">Turnos</button>
         <button type="button" class="side-tab" data-panel="threads">Hilos</button>
         <button type="button" class="side-tab" data-panel="cron">Cron</button>
         <button type="button" class="side-tab" data-panel="memory">Memoria</button>
@@ -1464,13 +1464,13 @@ function chatClientScript(): string {
         var panel = document.getElementById('threads-list-panel');
         if (!panel) return;
         if (!data.threads || data.threads.length === 0) {
-          panel.innerHTML = '<p style="padding:8px;color:var(--muted);font-size:0.9em;">No threads yet</p>';
+          panel.innerHTML = '<p style="padding:8px;color:var(--muted);font-size:0.9em;">Sin hilos todavía</p>';
           return;
         }
         var html = '<div class="thread-list">';
         data.threads.forEach(function (t) {
           var active = currentThreadId === t.id ? ' is-active' : '';
-          var title = t.title || 'Untitled';
+          var title = t.title || 'Sin título';
           if (title.length > 50) title = title.slice(0, 47) + '...';
           html += '<button class="thread-item' + active + '" data-thread-id="' + t.id + '">' +
                   '<div class="thread-title">' + title + '</div>' +
