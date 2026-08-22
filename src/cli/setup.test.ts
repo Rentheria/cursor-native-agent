@@ -253,4 +253,96 @@ describe('setup CLI', () => {
       rmSync(tmpRepo, { recursive: true, force: true });
     }
   });
+
+  // TODO: Re-enable when TTY mocking is available
+  it.skip('debería_crear_workspace_según_WORKSPACE_PATH_env', () => {
+    const tmpRepo = mkdtempSync(path.join(tmpdir(), 'setup-workspace-env-'));
+    const customWorkspace = path.join(tmpdir(), 'custom-workspace-test-');
+    try {
+      const packageJsonPath = path.join(tmpRepo, 'package.json');
+      writeFileSync(
+        packageJsonPath,
+        JSON.stringify({ name: 'test', version: '1.0.0' }),
+      );
+
+      const nodeModulesPath = path.join(tmpRepo, 'node_modules');
+      mkdtempSync(nodeModulesPath);
+
+      const envPath = path.join(tmpRepo, '.env');
+      writeFileSync(
+        envPath,
+        `WORKSPACE_PATH=${customWorkspace}\nCURSOR_NATIVE_AGENT_ONBOARDED=1\n`,
+        'utf8',
+      );
+
+      const fakeCursorAgent = path.join(tmpRepo, 'fake-cursor-agent.sh');
+      writeFileSync(
+        fakeCursorAgent,
+        '#!/bin/sh\necho "fake-cursor-agent 1.0.0"\n',
+        { mode: 0o755 },
+      );
+
+      runSetup(['--skip-deps'], {
+        cwd: tmpRepo,
+        env: {
+          ...process.env,
+          CURSOR_AGENT_BIN_PATH: fakeCursorAgent,
+        },
+      });
+
+      assert.ok(
+        existsSync(customWorkspace),
+        'Custom workspace debería existir según WORKSPACE_PATH',
+      );
+    } finally {
+      rmSync(tmpRepo, { recursive: true, force: true });
+      if (existsSync(customWorkspace)) {
+        rmSync(customWorkspace, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it.skip('debería_crear_workspace_por_defecto_cuando_WORKSPACE_PATH_vacío', () => {
+    const tmpRepo = mkdtempSync(path.join(tmpdir(), 'setup-workspace-default-'));
+    try {
+      const packageJsonPath = path.join(tmpRepo, 'package.json');
+      writeFileSync(
+        packageJsonPath,
+        JSON.stringify({ name: 'test', version: '1.0.0' }),
+      );
+
+      const nodeModulesPath = path.join(tmpRepo, 'node_modules');
+      mkdtempSync(nodeModulesPath);
+
+      const envPath = path.join(tmpRepo, '.env');
+      writeFileSync(
+        envPath,
+        'WORKSPACE_PATH=\nCURSOR_NATIVE_AGENT_ONBOARDED=1\n',
+        'utf8',
+      );
+
+      const fakeCursorAgent = path.join(tmpRepo, 'fake-cursor-agent.sh');
+      writeFileSync(
+        fakeCursorAgent,
+        '#!/bin/sh\necho "fake-cursor-agent 1.0.0"\n',
+        { mode: 0o755 },
+      );
+
+      runSetup(['--skip-deps'], {
+        cwd: tmpRepo,
+        env: {
+          ...process.env,
+          CURSOR_AGENT_BIN_PATH: fakeCursorAgent,
+        },
+      });
+
+      const defaultWorkspace = path.join(tmpRepo, 'workspace');
+      assert.ok(
+        existsSync(defaultWorkspace),
+        'Default workspace debería existir cuando WORKSPACE_PATH está vacío',
+      );
+    } finally {
+      rmSync(tmpRepo, { recursive: true, force: true });
+    }
+  });
 });

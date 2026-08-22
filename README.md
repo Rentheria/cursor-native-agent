@@ -88,6 +88,11 @@ El agente lee todo desde la raíz del repo, así que adaptarlo es editar markdow
 3. Ajusta el prompt de cron en `src/orchestration/cron-tick.ts` si quieres otro
    trigger que no sea el estado de git.
 
+**Workspace path:** Por defecto, el agente construye proyectos en `<repo>/workspace/`.
+Si querés usar otro path (ej. `~/Documents/AGE`), seteá `WORKSPACE_PATH` en `.env`
+(durante `npm run setup` se te pregunta Auto o Personalizado). Si está vacío o ausente,
+usa `<repo>/workspace`. El agente ve el path resuelto en su contexto de prompt.
+
 No hace falta tocar TypeScript para cambiar el comportamiento del agente.
 
 ## Instalación rápida
@@ -109,6 +114,7 @@ git clone https://github.com/Rentheria/cursor-native-agent.git
 cd cursor-native-agent
 
 # 2. Instalar y configurar (chequea deps + cursor-agent + crea .env y workspace/)
+#    Te pregunta dónde querés el workspace (Auto = <repo>/workspace, Personalizado = path absoluto)
 npm run setup
 
 # 3. Primer prompt
@@ -119,7 +125,9 @@ npm run cron:install
 ```
 
 `npm run setup` crea `.env` con defaults seguros (modelo Composer 2.5 Fast,
-workspace en `<repo>/workspace`, Telegram omitido hasta que lo configures).
+Telegram omitido). Si corrés con TTY, te pregunta por el workspace path
+(Auto = `<repo>/workspace`, Personalizado = path absoluto o relativo);
+no-TTY usa Auto silenciosamente.
 
 **Paso opcional:** después de `npm run setup`, corriendo `npm run cron:install`
 arma un cron job que chequea la salud del repo cada día de semana (9:00 AM
