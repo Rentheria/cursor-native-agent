@@ -1,4 +1,5 @@
 import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { isBuildIntent } from './build-intent.js';
@@ -154,6 +155,37 @@ export async function runAgentTurn(
       return cannedResult;
     }
 
+    const hasGitCommit = matchedSkills.some((skill) => skill.name === 'git-commit');
+    if (hasGitCommit && !existsSync(path.join(repoRoot, '.git'))) {
+      console.error('[agent] git-commit matched but no .git folder: refusing to init or commit everything');
+      const safetyReply = 'No git repository detected. Will not run `git init` or commit the entire tree. Please run this command inside a real git clone.';
+      const safetyResult: AgentTurnResult = {
+        reply: safetyReply,
+        stderr: '',
+        exitCode: 0,
+      };
+      
+      const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
+      const report = buildTurnDebugReport({
+        prompt: userPrompt,
+        allSkills: skills,
+        matchedSkills,
+        memory,
+      });
+      if (debug) {
+        printTurnDebug(report);
+      }
+      await appendAgentNdjson(repoRoot, {
+        ...report,
+        cursorAgentMs: 0,
+        totalMs: Math.round(performance.now() - totalStart),
+        reply: safetyResult.reply,
+        exitCode: 0,
+      });
+      
+      return safetyResult;
+    }
+
     console.error('[agent] Loading memory index + relevant details…');
     const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
     console.error(
@@ -216,6 +248,7 @@ export async function runAgentTurn(
 
     if (isBuildRequest) {
       await mkdir(workspacePath, { recursive: true });
+      console.error(`[agent] workspace: ${workspacePath}`);
     }
 
     console.error('[agent] Calling cursor-agent -p …');

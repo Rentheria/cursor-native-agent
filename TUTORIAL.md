@@ -132,8 +132,8 @@ o `npm run telegram`), el CLI pregunta la configuración básica y la guarda en 
 - **Modelo**: Elige Auto (default: `composer-2.5-fast`) o Personalizado (ingresa el ID del modelo)
 - **Puerto** del dashboard: Elige Auto (default: `3847`) o Personalizado (rango 1024-65535)
 - **Chat** en dashboard: Elige Auto (default: habilitado) o Personalizado (1=sí, 0=no)
-- **Workspace**: Elige Auto (default: `~/Documents/cursor-native-agent` o `~/Documentos/cursor-native-agent`
-  en locales español; en Windows: `%USERPROFILE%\Documents\cursor-native-agent`) o Personalizado (ingresa ruta absoluta)
+- **Workspace**: Elige Auto (default: `<repo>/workspace` — la carpeta gitignored dentro del repo)
+  o Personalizado (ingresa ruta absoluta o relativa al repo; `~` se expande al home del usuario)
 - **Telegram** (opcional, Elige Auto = omitir o Personalizado = configurar)
 
 Presiona Enter en cada pregunta para Auto (acepta el default). El onboarding:
@@ -156,14 +156,14 @@ Configuración inicial. Presiona Enter para Auto o elige Personalizado.
 Modelo [auto/personalizado] (Enter = auto → composer-2.5-fast):
 Puerto [auto/personalizado] (Enter = auto → 3847):
 Chat en dashboard [auto/personalizado] (Enter = auto → 1):
-Workspace [auto/personalizado] (Enter = auto → /home/you/Documents/cursor-native-agent):
+Workspace [auto/personalizado] (Enter = auto → ):
 
 Telegram es opcional (Auto = omitir).
 Configurar Telegram? [auto/personalizado] (Enter = auto → omitir):
 
 Configuración completada. Guardando en .env...
 [onboarding] Configuration saved to .env
-[onboarding] Workspace: /home/you/Documents/cursor-native-agent
+[onboarding] Workspace:
 
 [agent] Loading skills…
 ...

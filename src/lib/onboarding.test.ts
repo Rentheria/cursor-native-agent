@@ -31,11 +31,12 @@ describe('onboarding', () => {
   });
 
   describe('getDefaultWorkspacePath', () => {
-    it('returns path ending with cursor-native-agent', () => {
+    it('returns empty string (defaults to repo workspace)', () => {
       const workspacePath = getDefaultWorkspacePath();
-      assert.ok(
-        workspacePath.endsWith('cursor-native-agent'),
-        `Expected path to end with cursor-native-agent, got: ${workspacePath}`,
+      assert.strictEqual(
+        workspacePath,
+        '',
+        'Default workspace path should be empty (resolves to <repo>/workspace)',
       );
     });
   });
@@ -128,9 +129,10 @@ describe('onboarding', () => {
       assert.strictEqual(config.TELEGRAM_ALLOWED_CHAT_IDS, '');
       assert.strictEqual(config.CURSOR_NATIVE_AGENT_DEBUG, '0');
       assert.strictEqual(config.CURSOR_NATIVE_AGENT_ONBOARDED, '1');
-      assert.ok(
-        config.WORKSPACE_PATH.includes('cursor-native-agent'),
-        'Default workspace path should contain cursor-native-agent',
+      assert.strictEqual(
+        config.WORKSPACE_PATH,
+        '',
+        'Default workspace path should be empty (resolves to <repo>/workspace)',
       );
     });
   });
