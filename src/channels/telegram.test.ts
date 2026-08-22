@@ -572,6 +572,197 @@ describe('Telegram safeMode', () => {
   });
 });
 
+describe('Telegram thread creation', () => {
+  it('slash_start_debe_crear_el_archivo_de_thread_para_ese_chat', async () => {
+    const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    
+    const repoRoot = await mkdtemp(join(tmpdir(), 'telegram-threads-test-'));
+    try {
+      const sent: string[] = [];
+      const api = createTelegramApi({
+        token: 't',
+        apiBase: 'https://telegram.test',
+        fetchFn: async (_input, init) => {
+          const body = JSON.parse(String(init?.body)) as { text: string };
+          sent.push(body.text);
+          return jsonResponse({
+            ok: true,
+            result: { message_id: 1, chat: { id: 555 }, text: body.text },
+          });
+        },
+      });
+
+      await dispatchInboundMessage({
+        inbound: {
+          updateId: 1,
+          messageId: 1,
+          chatId: 555,
+          text: '/start',
+          fromUserId: 1,
+          fromUsername: 'demo',
+        },
+        api,
+        allowlist: allowlistOf({ chats: [555], repoRoot }),
+        processInbound: async () => {
+          throw new Error('El agente no debe ejecutarse para /start');
+        },
+      });
+
+      // Verificar que el thread file fue creado
+      const threadPath = join(repoRoot, 'threads', 'telegram-chat-555.json');
+      const threadContent = await readFile(threadPath, 'utf8');
+      const thread = JSON.parse(threadContent) as {
+        id: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      
+      assert.equal(thread.id, 'telegram-chat-555');
+      assert.equal(thread.messages.length, 0);
+      assert.equal(sent.length, 1);
+      assert.match(sent[0] ?? '', /Conversación iniciada/);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('mensaje_sin_start_previo_debe_crear_thread_automáticamente', async () => {
+    const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { appendToThread } = await import('../lib/threads-store.js');
+    
+    const repoRoot = await mkdtemp(join(tmpdir(), 'telegram-threads-test-'));
+    try {
+      const sent: string[] = [];
+      const api = createTelegramApi({
+        token: 't',
+        apiBase: 'https://telegram.test',
+        fetchFn: async (_input, init) => {
+          const body = JSON.parse(String(init?.body)) as { text: string };
+          sent.push(body.text);
+          return jsonResponse({
+            ok: true,
+            result: { message_id: 1, chat: { id: 777 }, text: body.text },
+          });
+        },
+      });
+
+      // Enviar mensaje sin /start previo
+      await dispatchInboundMessage({
+        inbound: {
+          updateId: 1,
+          messageId: 1,
+          chatId: 777,
+          text: 'Hola, ¿qué hace este repo?',
+          fromUserId: 1,
+          fromUsername: 'demo',
+        },
+        api,
+        allowlist: allowlistOf({ chats: [777], repoRoot }),
+        processInbound: async (_inbound, _onDelta, _confirmedForce, _workspace, threadId) => {
+          // Simular lo que hace runAgentTurn: append user message + assistant reply
+          if (threadId !== undefined) {
+            await appendToThread(repoRoot, threadId, 'user', 'Hola, ¿qué hace este repo?');
+            await appendToThread(repoRoot, threadId, 'assistant', 'Respuesta del agente');
+          }
+          return { reply: 'Respuesta del agente', stderr: '', exitCode: 0 };
+        },
+      });
+
+      // Verificar que el thread file fue creado automáticamente
+      const threadPath = join(repoRoot, 'threads', 'telegram-chat-777.json');
+      const threadContent = await readFile(threadPath, 'utf8');
+      const thread = JSON.parse(threadContent) as {
+        id: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      
+      assert.equal(thread.id, 'telegram-chat-777');
+      // Debe tener el mensaje del usuario y la respuesta del asistente
+      assert.equal(thread.messages.length, 2);
+      assert.equal(thread.messages[0]?.content, 'Hola, ¿qué hace este repo?');
+      assert.equal(thread.messages[1]?.content, 'Respuesta del agente');
+      assert.equal(sent.length, 1);
+      assert.equal(sent[0], 'Respuesta del agente');
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('thread_existente_debe_continuar_correctamente', async () => {
+    const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { createOrResetThread } = await import('../lib/threads-store.js');
+    const { appendToThread } = await import('../lib/threads-store.js');
+    
+    const repoRoot = await mkdtemp(join(tmpdir(), 'telegram-threads-test-'));
+    try {
+      // Pre-crear un thread con historial
+      const threadId = 'telegram-chat-888';
+      await createOrResetThread(repoRoot, threadId);
+      await appendToThread(repoRoot, threadId, 'user', '¿Qué es esto?');
+      await appendToThread(repoRoot, threadId, 'assistant', 'Es un agente.');
+      
+      const sent: string[] = [];
+      const api = createTelegramApi({
+        token: 't',
+        apiBase: 'https://telegram.test',
+        fetchFn: async (_input, init) => {
+          const body = JSON.parse(String(init?.body)) as { text: string };
+          sent.push(body.text);
+          return jsonResponse({
+            ok: true,
+            result: { message_id: 1, chat: { id: 888 }, text: body.text },
+          });
+        },
+      });
+
+      // Enviar nuevo mensaje
+      await dispatchInboundMessage({
+        inbound: {
+          updateId: 1,
+          messageId: 1,
+          chatId: 888,
+          text: '¿Y cómo funciona?',
+          fromUserId: 1,
+          fromUsername: 'demo',
+        },
+        api,
+        allowlist: allowlistOf({ chats: [888], repoRoot }),
+        processInbound: async (_inbound, _onDelta, _confirmedForce, _workspace, threadIdParam) => {
+          // Simular lo que hace runAgentTurn: append user message + assistant reply
+          if (threadIdParam !== undefined) {
+            await appendToThread(repoRoot, threadIdParam, 'user', '¿Y cómo funciona?');
+            await appendToThread(repoRoot, threadIdParam, 'assistant', 'Usa cursor-agent');
+          }
+          return { reply: 'Usa cursor-agent', stderr: '', exitCode: 0 };
+        },
+      });
+
+      // Verificar que el thread tiene todo el historial
+      const threadPath = join(repoRoot, 'threads', 'telegram-chat-888.json');
+      const threadContent = await readFile(threadPath, 'utf8');
+      const thread = JSON.parse(threadContent) as {
+        id: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      
+      assert.equal(thread.id, threadId);
+      assert.equal(thread.messages.length, 4);
+      assert.equal(thread.messages[0]?.content, '¿Qué es esto?');
+      assert.equal(thread.messages[1]?.content, 'Es un agente.');
+      assert.equal(thread.messages[2]?.content, '¿Y cómo funciona?');
+      assert.equal(thread.messages[3]?.content, 'Usa cursor-agent');
+      assert.equal(sent.length, 1);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Telegram confirmación de build', () => {
   it('debería_pedir_confirmación_cuando_requiresForceConfirmation_es_true', async () => {
     const sent: string[] = [];

@@ -18,6 +18,7 @@ import {
   consumePendingTelegramForce,
   cancelPendingTelegramForce,
 } from '../core/pending-force.js';
+import { createOrResetThread } from '../lib/threads-store.js';
 import {
   createTelegramApi,
   requireTelegramBotToken,
@@ -135,6 +136,21 @@ export async function dispatchInboundMessage(params: {
   if (isSlashCommand(inbound.text)) {
     const who = inbound.fromUsername ?? String(inbound.chatId);
     const lower = inbound.text.toLowerCase().trim();
+    
+    // Handle /start: create or reset thread, then send canned reply
+    if (lower.startsWith('/start')) {
+      const threadId = getTelegramThreadId(inbound.chatId);
+      const repoRoot = params.allowlist.repoRoot ?? '';
+      await createOrResetThread(repoRoot, threadId);
+      console.error(
+        `[telegram] /start from ${who} chat=${String(inbound.chatId)} - thread ${threadId} created/reset`,
+      );
+      await api.sendMessage({
+        chatId: inbound.chatId,
+        text: getSlashCommandReply(inbound.text),
+      });
+      return;
+    }
     
     // Handle /ok confirmation
     if (lower.startsWith('/ok')) {

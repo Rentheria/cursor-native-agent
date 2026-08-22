@@ -119,7 +119,48 @@ export async function loadThread(
 }
 
 /**
+ * Creates or resets a thread with a specific ID (for Telegram stable thread IDs).
+ * If the thread exists, it's cleared. If not, it's created empty.
+ * Returns the new empty thread.
+ */
+export async function createOrResetThread(
+  repoRoot: string,
+  threadId: string,
+): Promise<Thread> {
+  const threadsDir = getThreadsDir(repoRoot);
+  await mkdir(threadsDir, { recursive: true });
+
+  const now = new Date().toISOString();
+  const thread: Thread = {
+    id: threadId,
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  };
+
+  const threadPath = getThreadPath(repoRoot, threadId);
+  await writeFile(threadPath, JSON.stringify(thread, null, 2), 'utf8');
+  return thread;
+}
+
+/**
+ * Ensures a thread exists. If it doesn't exist, creates an empty thread.
+ * Returns the thread (either existing or newly created).
+ */
+export async function ensureThread(
+  repoRoot: string,
+  threadId: string,
+): Promise<Thread> {
+  const existing = await loadThread(repoRoot, threadId);
+  if (existing !== undefined) {
+    return existing;
+  }
+  return createOrResetThread(repoRoot, threadId);
+}
+
+/**
  * Appends a message to an existing thread. Returns the updated thread.
+ * If the thread doesn't exist, creates it first (defense in depth).
  */
 export async function appendToThread(
   repoRoot: string,
@@ -127,10 +168,8 @@ export async function appendToThread(
   role: 'user' | 'assistant',
   content: string,
 ): Promise<Thread> {
-  const existing = await loadThread(repoRoot, threadId);
-  if (existing === undefined) {
-    throw new Error(`Thread ${threadId} not found`);
-  }
+  // Defense in depth: ensure thread exists before appending
+  const existing = await ensureThread(repoRoot, threadId);
 
   const now = new Date().toISOString();
   const newMessage: ThreadMessage = { role, content, timestamp: now };

@@ -233,3 +233,127 @@ describe('threads-store', () => {
     }
   });
 });
+
+describe('createOrResetThread', () => {
+  it('crea un thread vacío con ID específico', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { createOrResetThread } = await import('./threads-store.js');
+      const thread = await createOrResetThread(repoRoot, 'telegram-chat-123');
+      
+      assert.equal(thread.id, 'telegram-chat-123');
+      assert.equal(thread.messages.length, 0);
+      assert.ok(thread.createdAt);
+      assert.equal(thread.createdAt, thread.updatedAt);
+      
+      // Verificar que se guardó
+      const loaded = await loadThread(repoRoot, 'telegram-chat-123');
+      assert.ok(loaded);
+      assert.equal(loaded.id, 'telegram-chat-123');
+      assert.equal(loaded.messages.length, 0);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('resetea un thread existente borrando su historial', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { createOrResetThread } = await import('./threads-store.js');
+      
+      // Crear thread con mensajes
+      const thread1 = await createOrResetThread(repoRoot, 'telegram-chat-456');
+      await appendToThread(repoRoot, thread1.id, 'user', 'Mensaje 1');
+      await appendToThread(repoRoot, thread1.id, 'assistant', 'Respuesta 1');
+      
+      const loaded1 = await loadThread(repoRoot, 'telegram-chat-456');
+      assert.equal(loaded1?.messages.length, 2);
+      
+      // Reset del thread
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const thread2 = await createOrResetThread(repoRoot, 'telegram-chat-456');
+      
+      assert.equal(thread2.id, 'telegram-chat-456');
+      assert.equal(thread2.messages.length, 0);
+      assert.ok(
+        new Date(thread2.createdAt).getTime() >= new Date(thread1.createdAt).getTime(),
+        'createdAt should be updated on reset',
+      );
+      
+      // Verificar que se guardó vacío
+      const loaded2 = await loadThread(repoRoot, 'telegram-chat-456');
+      assert.equal(loaded2?.messages.length, 0);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('ensureThread', () => {
+  it('devuelve thread existente sin modificarlo', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { ensureThread } = await import('./threads-store.js');
+      
+      // Crear thread con mensajes
+      const created = await createThread(repoRoot, 'Mensaje inicial');
+      await appendToThread(repoRoot, created.id, 'assistant', 'Respuesta');
+      
+      const ensured = await ensureThread(repoRoot, created.id);
+      
+      assert.equal(ensured.id, created.id);
+      assert.equal(ensured.messages.length, 2);
+      assert.equal(ensured.messages[0]?.content, 'Mensaje inicial');
+      assert.equal(ensured.messages[1]?.content, 'Respuesta');
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('crea thread vacío si no existe', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { ensureThread } = await import('./threads-store.js');
+      
+      const ensured = await ensureThread(repoRoot, 'new-thread-789');
+      
+      assert.equal(ensured.id, 'new-thread-789');
+      assert.equal(ensured.messages.length, 0);
+      
+      // Verificar que se guardó
+      const loaded = await loadThread(repoRoot, 'new-thread-789');
+      assert.ok(loaded);
+      assert.equal(loaded.id, 'new-thread-789');
+      assert.equal(loaded.messages.length, 0);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('appendToThread con defense in depth', () => {
+  it('crea thread automáticamente si no existe al hacer append', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Intentar append sin crear el thread primero
+      const updated = await appendToThread(
+        repoRoot,
+        'auto-created-thread',
+        'user',
+        'Primer mensaje',
+      );
+      
+      assert.equal(updated.id, 'auto-created-thread');
+      assert.equal(updated.messages.length, 1);
+      assert.equal(updated.messages[0]?.role, 'user');
+      assert.equal(updated.messages[0]?.content, 'Primer mensaje');
+      
+      // Verificar que se guardó
+      const loaded = await loadThread(repoRoot, 'auto-created-thread');
+      assert.ok(loaded);
+      assert.equal(loaded.messages.length, 1);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
