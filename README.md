@@ -548,6 +548,8 @@ El dashboard registra `POST /api/chat` (SSE) y muestra una caja de chat. Usa el
 mismo `runAgentTurn` que `npm run agent` / Telegram, con streaming
 (`--output-format stream-json --stream-partial-output`).
 
+**Autenticación:** El dashboard requiere un token de autenticación para acceder a las APIs de chat y conversación. El token se genera automáticamente en `npm run setup` y se guarda en `.env` como `DASHBOARD_TOKEN`. El cliente debe enviar el token usando el header `X-Dashboard-Token` o `Authorization: Bearer <token>`.
+
 ```bash
 # Chat habilitado (default):
 npm run dashboard
