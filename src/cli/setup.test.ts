@@ -76,7 +76,7 @@ describe('setup CLI', () => {
         cwd: tmpRepo,
         env: {
           ...process.env,
-          CURSOR_AGENT_BIN_PATH: undefined,
+          CURSOR_AGENT_BIN_PATH: '/tmp/cursor-agent-does-not-exist-12345',
         },
       });
 
@@ -107,7 +107,7 @@ describe('setup CLI', () => {
         cwd: tmpRepo,
         env: {
           ...process.env,
-          CURSOR_AGENT_BIN_PATH: undefined,
+          CURSOR_AGENT_BIN_PATH: '/tmp/cursor-agent-does-not-exist-12345',
         },
       });
 
@@ -134,7 +134,7 @@ describe('setup CLI', () => {
         cwd: tmpRepo,
         env: {
           ...process.env,
-          CURSOR_AGENT_BIN_PATH: undefined,
+          CURSOR_AGENT_BIN_PATH: '/tmp/cursor-agent-does-not-exist-12345',
         },
       });
 
@@ -202,7 +202,7 @@ describe('setup CLI', () => {
           stdio: 'pipe',
           env: {
             ...process.env,
-            CURSOR_AGENT_BIN_PATH: undefined,
+            CURSOR_AGENT_BIN_PATH: '/tmp/cursor-agent-does-not-exist-12345',
           },
         });
       } catch (error: unknown) {
@@ -240,7 +240,7 @@ describe('setup CLI', () => {
           cwd: tmpRepo,
           env: {
             ...process.env,
-            CURSOR_AGENT_BIN_PATH: undefined,
+            CURSOR_AGENT_BIN_PATH: '/tmp/cursor-agent-does-not-exist-12345',
           },
         });
       } catch {
