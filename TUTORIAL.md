@@ -155,6 +155,24 @@ Si cursor-agent no está en PATH, verás instrucciones de instalación y el
 script saldrá con código no-cero. Instala `cursor-agent` según tu sistema
 operativo (ver sección anterior) y vuelve a correr `npm run setup`.
 
+### (Opcional) Armar tick autónomo
+
+Después de `npm run setup`, podés instalar un cron job que chequea la salud
+del repo cada día de semana (lunes a viernes, 9:00 AM local):
+
+```bash
+npm run cron:install
+```
+
+El tick desatendido corre con `--check-only` (solo chequeo de git + memoria +
+skills, sin gastar llamadas al modelo). Si configuraste Telegram en `.env`,
+recibís una notificación **solo cuando hay algo que reportar** (errores,
+warnings). Ticks con veredicto READY quedan en silencio en `logs/cron.log`.
+
+Para desinstalar: `npm run cron:uninstall`.
+
+Requisito: `cron` o `cronie` instalado en el sistema.
+
 ### Primer prompt
 
 Ahora que `npm run setup` completó, prueba el agente:
@@ -229,6 +247,8 @@ alcance, cómo correrlo). Prompts bien especificados construyen directamente sin
 | `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (default: composer-2.5-fast; seteá a `auto` para Auto), `CURSOR_NATIVE_AGENT_DEBUG=1` |
 | `npm run dashboard` | Observatorio HTTP en `127.0.0.1` (logs + MEMORY + chat) | `PORT` (default `3847`). Chat habilitado por defecto; `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para solo lectura |
 | `npm run cron` / `scripts/cron-tick.sh` | Health check real + triage en modo `ask` (Linux/macOS) | Wrapper carga nvm/`~/.local/bin`. Systemd (Linux): setea `HOME` y `PATH` (ver abajo) |
+| `npm run cron:install` | Instala cron job para ticks desatendidos (weekdays 9:00 AM, `--check-only`) | `CURSOR_NATIVE_AGENT_CRON_SCHEDULE` (default: `0 9 * * 1-5`) |
+| `npm run cron:uninstall` | Desinstala cron job instalado por `cron:install` | Ninguna |
 | `npm run telegram` | Canal Telegram → mismo pipeline | **Requiere** `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` (ver `.env.example`) |
 
 Copia `.env.example` → `.env` si quieres config en un solo archivo (Unix:

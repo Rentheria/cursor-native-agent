@@ -146,6 +146,10 @@ function printNextSteps(): void {
   console.error('     npm run onboard');
   console.error('     (or set TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_CHAT_IDS)');
   console.error('');
+  console.error('  4. Optional: Install weekday health check tick');
+  console.error('     npm run cron:install');
+  console.error('     (runs --check-only; notifies Telegram only when needed)');
+  console.error('');
   console.error('Learn more: README.md and TUTORIAL.md');
   console.error('');
 }

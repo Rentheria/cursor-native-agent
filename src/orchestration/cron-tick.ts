@@ -17,6 +17,7 @@ import {
   type HealthDelta,
   type RepoHealthSnapshot,
 } from './repo-health.js';
+import { maybeNotifyTelegramCronResult } from './cron-notify.js';
 
 export const CRON_TICK_PROMPT_PREFIX =
   'Autonomous cron tick for cursor-native-agent. Read-only: do not edit files.';
@@ -153,7 +154,7 @@ async function main(): Promise<void> {
     '../..',
   );
   loadRepoEnv(repoRoot);
-  await maybeRunOnboarding({ repoRoot });
+  await maybeRunOnboarding({ repoRoot, skipOnboarding: true });
   const checkOnly = process.argv.includes(CHECK_ONLY_FLAG);
   const logsDirectory = path.join(repoRoot, 'logs');
   await mkdir(logsDirectory, { recursive: true });
@@ -200,6 +201,15 @@ async function main(): Promise<void> {
     triage: checkOnly ? { finding: undefined, action: undefined } : parseAgentTriage(stdout),
   });
 
+  const report: CronTickReport = {
+    startedAt,
+    finishedAt,
+    exitCode,
+    snapshot,
+    delta,
+    triage: checkOnly ? { finding: undefined, action: undefined } : parseAgentTriage(stdout),
+  };
+
   // Finding first so `tail` shows the demoable block without scrolling the prompt.
   const logEntry = [
     finding,
@@ -215,6 +225,9 @@ async function main(): Promise<void> {
 
   // Persisted last so a crash mid-tick does not lose the previous baseline.
   await writeSnapshot(repoRoot, snapshot);
+
+  // Send Telegram notification if configured (fail-closed: no token/allowlist → no send, no crash)
+  await maybeNotifyTelegramCronResult(report);
 
   // Also print the finding to stderr so a live `npm run cron` shows it immediately.
   console.error(finding);
