@@ -40,6 +40,8 @@ opcional Telegram/cron/dashboard.
 Este repo nació como demo pública para el Cursor Meetup GDL del 27-ago-2026,
 pero funciona como agente general clonado en cualquier repo.
 
+Checklist del talk: [DEMO-CHECKLIST.md](./DEMO-CHECKLIST.md)
+
 ## Para uso personal / seguridad
 
 Este es un **agente personal download-and-run**: cada persona lo corre en su
