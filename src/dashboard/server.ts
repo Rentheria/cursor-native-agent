@@ -1103,10 +1103,10 @@ async function main(): Promise<void> {
   );
   if (chatEnabled) {
     console.error(
-      '[dashboard] Chat requiere desbloqueo con DASHBOARD_TOKEN de .env. Abrí la página y usá "Desbloquear".',
+      '[dashboard] Abrí la página en localhost → cookie HttpOnly de sesión se emite automáticamente → chat funciona sin pegar token.',
     );
     console.error(
-      '[dashboard] Safe mode: repoRoot cwd, confirmar antes de escribir, con --trust. Solo 127.0.0.1.',
+      '[dashboard] "Desbloquear" solo si borraste cookies. Safe mode: confirmar antes de escribir, con --trust. Solo 127.0.0.1.',
     );
   }
 }
