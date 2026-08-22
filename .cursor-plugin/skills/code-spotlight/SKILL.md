@@ -1,7 +1,7 @@
 ---
 name: code-spotlight
 description: Spotlight one file or function for a live audience in five bullets or fewer
-triggers: spotlight, code spotlight, highlight this, show on stage, live spotlight, en vivo, destaca, spotlight this
+triggers: spotlight, code spotlight, highlight this, show on stage, live spotlight, en vivo, destaca, spotlight this, mostrar código, show code, explain this file, explica este archivo
 ---
 
 # Skill: code-spotlight
