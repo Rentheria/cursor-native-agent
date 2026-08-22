@@ -8,14 +8,13 @@ Framing: **agente personal download-and-run** (no SaaS). Meetup = lanzamiento, n
 
 ## 1. La noche anterior (o la mañana del 27)
 
-- [ ] `git clone` fresco de `main` (o `git pull` en un clone limpio). Confirmar tip reciente (#23+).
-- [ ] `npm run setup` (no solo `npm install`).
-- [ ] Abrir `.env` y copiar `DASHBOARD_TOKEN` (el setup **no** lo imprime al terminal).
-- [ ] `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` (tu chat) en `.env`.
+- [ ] `git clone` fresco de `main` (o `git pull` en un clone limpio). Confirmar tip reciente (#25+).
+- [ ] `npm run setup` (no solo `npm install`). El token se guarda en `.env` automáticamente.
+- [ ] `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` (tu chat) en `.env` si vas a mostrar Telegram.
 - [ ] `WORKSPACE_PATH` vacío o apuntando a `<repo>/workspace`.
 - [ ] `npm run typecheck` y `npm test` en verde.
 - [ ] Ensayo completo en **la laptop del talk** (no solo en el box):
-  1. Dashboard pitch → build → Confirmar  
+  1. Dashboard pitch → build → Confirmar (chat funciona directo, sin pegar token)
   2. Telegram `/start` → pitch → build → Confirmar  
 - [ ] Cargar deck / PDF; probar proyector o mirror una vez.
 - [ ] Cerrar cualquier otro `npm run telegram` / poller en otras máquinas (solo **un** `getUpdates`).
@@ -27,8 +26,8 @@ Framing: **agente personal download-and-run** (no SaaS). Meetup = lanzamiento, n
 ## 2. 30–45 min antes (backstage)
 
 - [ ] Repo limpio: `git status` sin basura de ensayos previos (o workspace limpio).
-- [ ] Terminal 1: `npm run dashboard` → abre `http://127.0.0.1:<PORT>`.
-- [ ] Unlock del dashboard con el token (sessionStorage).
+- [ ] Terminal 1: `npm run dashboard` → abre `http://127.0.0.1:<PORT>` en el navegador.
+- [ ] Dashboard abierto; chat funciona directo (cookie de sesión automática; no necesitas pegar token).
 - [ ] Terminal 2 (solo si demuestras Telegram): `npm run telegram` — **una sola** instancia.
 - [ ] Smoke rápido:
   - Dashboard: `qué hace este repo` → pitch canned (~instantáneo, sin modelo).
@@ -86,7 +85,7 @@ Framing: **agente personal download-and-run** (no SaaS). Meetup = lanzamiento, n
 | Fallo | Qué hacer |
 |-------|-----------|
 | Modelo lento / cuota | Quédate en pitch canned + mostrar código/skills; no improvisar builds largos |
-| Dashboard no unlock | Pegar DASHBOARD_TOKEN desde .env; si falta, npm run setup otra vez |
+| Chat da 401 (cookies borradas) | Abrir modal "Desbloquear" manualmente (botón o F5); pegar DASHBOARD_TOKEN desde .env |
 | Telegram mudo / 409 conflict | Matar otros pollers; un solo npm run telegram |
 | Confirmar no responde | Usar /ok en el chat; o demo solo dashboard |
 | Wi-Fi cae | CLI local + pitch canned; Telegram queda fuera |

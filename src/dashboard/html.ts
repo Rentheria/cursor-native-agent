@@ -1160,6 +1160,7 @@ function chatClientScript(): string {
   function fetchWithToken(url, options) {
     options = options || {};
     options.headers = options.headers || {};
+    options.credentials = 'include';
     var token = getToken();
     if (token) {
       options.headers['X-Dashboard-Token'] = token;
@@ -1172,10 +1173,6 @@ function chatClientScript(): string {
       }
       return res;
     });
-  }
-
-  if (!getToken()) {
-    showUnlockModal(false);
   }
 
   document.querySelectorAll('.side-tab').forEach(function (tab) {
