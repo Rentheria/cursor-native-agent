@@ -937,6 +937,14 @@ function chatStyles(): string {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
       .sidebar {
@@ -957,6 +965,7 @@ function chatStyles(): string {
 function chatClientScript(): string {
   // Keep as a plain string for inline <script>; escape carefully for template.
   return `(function () {
+  var TOKEN_KEY = 'dashboardToken';
   var form = document.getElementById('chat-form');
   var input = document.getElementById('chat-input');
   var log = document.getElementById('chat-log');
@@ -967,6 +976,102 @@ function chatClientScript(): string {
 
   var currentContext = null;
   var currentThreadId = localStorage.getItem('currentThreadId') || null;
+
+  function getToken() {
+    return sessionStorage.getItem(TOKEN_KEY);
+  }
+
+  function setToken(token) {
+    sessionStorage.setItem(TOKEN_KEY, token);
+  }
+
+  function clearToken() {
+    sessionStorage.removeItem(TOKEN_KEY);
+  }
+
+  function showUnlockModal(isRetry) {
+    var existingModal = document.getElementById('unlock-modal');
+    if (existingModal) return;
+    
+    var overlay = document.createElement('div');
+    overlay.id = 'unlock-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999;animation:fadeIn 200ms ease;';
+    
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--surface);padding:1.5rem;border-radius:1rem;max-width:24rem;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:slideUp 250ms ease;';
+    
+    var title = document.createElement('h2');
+    title.textContent = isRetry ? 'Token incorrecto' : 'Dashboard protegido';
+    title.style.cssText = 'margin:0 0 0.5rem;font-size:1.2rem;color:var(--ink);';
+    
+    var desc = document.createElement('p');
+    desc.textContent = isRetry ? 'El token ingresado no es válido. Por favor verifica e intenta de nuevo.' : 'Ingresa el token de autenticación desde tu archivo .env para acceder al chat.';
+    desc.style.cssText = 'margin:0 0 1rem;color:var(--muted);font-size:0.9rem;line-height:1.5;';
+    
+    var inputField = document.createElement('input');
+    inputField.type = 'password';
+    inputField.placeholder = 'DASHBOARD_TOKEN';
+    inputField.style.cssText = 'width:100%;padding:0.65rem 0.85rem;font:inherit;font-size:0.95rem;border:1px solid var(--line);border-radius:0.6rem;margin-bottom:1rem;background:var(--panel);';
+    
+    var btn = document.createElement('button');
+    btn.textContent = 'Desbloquear';
+    btn.style.cssText = 'width:100%;padding:0.65rem;font:inherit;font-weight:600;border:none;border-radius:0.6rem;background:var(--accent);color:#fff;cursor:pointer;';
+    
+    var error = document.createElement('p');
+    error.style.cssText = 'margin:0.75rem 0 0;color:#c53030;font-size:0.85rem;display:none;';
+    
+    btn.addEventListener('click', function () {
+      var token = inputField.value.trim();
+      if (!token) {
+        error.textContent = 'El token no puede estar vacío';
+        error.style.display = 'block';
+        return;
+      }
+      setToken(token);
+      document.body.removeChild(overlay);
+      if (isRetry) {
+        location.reload();
+      }
+    });
+    
+    inputField.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+    
+    modal.appendChild(title);
+    modal.appendChild(desc);
+    modal.appendChild(inputField);
+    modal.appendChild(btn);
+    modal.appendChild(error);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    inputField.focus();
+  }
+
+  function fetchWithToken(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    var token = getToken();
+    if (token) {
+      options.headers['X-Dashboard-Token'] = token;
+    }
+    return fetch(url, options).then(function (res) {
+      if (res.status === 401) {
+        clearToken();
+        showUnlockModal(true);
+        throw new Error('Unauthorized');
+      }
+      return res;
+    });
+  }
+
+  if (!getToken()) {
+    showUnlockModal(false);
+  }
 
   document.querySelectorAll('.side-tab').forEach(function (tab) {
     tab.addEventListener('click', function () {
@@ -1004,7 +1109,7 @@ function chatClientScript(): string {
           currentContext = { userPrompt: turnPrompt, assistantReply: turnReply || '' };
           appendBubble('user', turnPrompt, false);
           if (turnReply) {
-            fetch('/api/markdown', {
+            fetchWithToken('/api/markdown', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ text: turnReply })
@@ -1086,7 +1191,7 @@ function chatClientScript(): string {
       body.context = currentContext;
     }
 
-    fetch('/api/chat', {
+    fetchWithToken('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
       body: JSON.stringify(body)
@@ -1162,7 +1267,7 @@ function chatClientScript(): string {
   });
 
   function loadThreads() {
-    fetch('/api/threads')
+    fetchWithToken('/api/threads')
       .then(function (res) { return res.json(); })
       .then(function (data) {
         var panel = document.getElementById('threads-list-panel');
@@ -1197,7 +1302,7 @@ function chatClientScript(): string {
   }
 
   function loadThread(threadId) {
-    fetch('/api/threads/' + threadId)
+    fetchWithToken('/api/threads/' + threadId)
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (!data.thread) return;
@@ -1209,7 +1314,7 @@ function chatClientScript(): string {
         
         data.thread.messages.forEach(function (msg) {
           if (msg.role === 'assistant') {
-            fetch('/api/markdown', {
+            fetchWithToken('/api/markdown', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ text: msg.content })
