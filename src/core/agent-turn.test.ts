@@ -47,6 +47,7 @@ async function makeRepo(): Promise<string> {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-turn-'));
   await mkdir(path.join(repoRoot, 'memory'), { recursive: true });
   await mkdir(path.join(repoRoot, 'skills'), { recursive: true });
+  await mkdir(path.join(repoRoot, '.git'), { recursive: true });
 
   await writeFile(
     path.join(repoRoot, 'MEMORY.md'),
@@ -554,5 +555,85 @@ describe('runAgentTurn (delegación)', () => {
     assert.equal(calls.length, 1);
     assert.doesNotMatch(calls[0]?.prompt ?? '', /# Worker dispatch result/);
     assert.equal(result.reply, 'respuesta directa');
+  });
+});
+
+describe('runAgentTurn (git safety guard)', () => {
+  async function makeRepoWithoutGit(): Promise<string> {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-turn-'));
+    await mkdir(path.join(repoRoot, 'memory'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'skills'), { recursive: true });
+
+    await writeFile(
+      path.join(repoRoot, 'MEMORY.md'),
+      [
+        '# MEMORY',
+        '',
+        '- [House git rules](memory/house-git-rules.md) — commit trailer y ramas',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    await writeFile(
+      path.join(repoRoot, 'memory/house-git-rules.md'),
+      [
+        '---',
+        'name: house-git-rules',
+        'description: convenciones de commit de la casa',
+        'metadata:',
+        '  type: convention',
+        '---',
+        '',
+        'Los commits llevan trailer de co-author.',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    await writeFile(
+      path.join(repoRoot, 'skills/git-commit.md'),
+      [
+        '---',
+        'name: git-commit',
+        'description: arma un commit siguiendo la convención',
+        'triggers: commit',
+        '---',
+        '',
+        'Cuerpo de la skill git-commit.',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    return repoRoot;
+  }
+
+  it('debería_rechazar_git_commit_sin_repo_git', async () => {
+    const repoRoot = await makeRepoWithoutGit();
+    const { runAgent, calls } = fakeRunner('nunca se llama');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz un commit',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 0, 'Should not call cursor-agent when git-commit matches but no .git');
+    assert.match(result.reply, /No git repository detected/);
+    assert.match(result.reply, /git init/);
+    assert.equal(result.exitCode, 0);
+  });
+
+  it('debería_permitir_git_commit_con_repo_git', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('commit creado');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz un commit',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 1, 'Should call cursor-agent when git-commit matches and .git exists');
+    assert.equal(result.reply, 'commit creado');
   });
 });

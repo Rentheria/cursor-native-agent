@@ -30,6 +30,7 @@ const SKIP_ONBOARD_ENV = 'CURSOR_NATIVE_AGENT_SKIP_ONBOARD';
 
 /**
  * Detects the user's Documents folder, checking for Spanish "Documentos" first.
+ * @deprecated No longer used for default workspace path. Use repo workspace/ instead.
  */
 export function detectDocumentsFolder(): string {
   const home = homedir();
@@ -48,11 +49,10 @@ export function detectDocumentsFolder(): string {
 }
 
 /**
- * Returns the default workspace path: Documents/cursor-native-agent or Documentos/cursor-native-agent.
+ * Returns the default workspace path: empty string (defaults to <repo>/workspace).
  */
 export function getDefaultWorkspacePath(): string {
-  const docsFolder = detectDocumentsFolder();
-  return path.join(docsFolder, 'cursor-native-agent');
+  return '';
 }
 
 /**
@@ -199,9 +199,11 @@ export async function runInteractiveOnboarding(): Promise<OnboardingConfig> {
       rl,
       'Workspace',
       workspaceDefault,
-      'Ruta para proyectos de usuario (se expande ~)',
+      'Ruta para proyectos de usuario (absolute or relative to repo; empty = <repo>/workspace)',
     );
-    workspacePath = expandPath(workspacePath);
+    if (workspacePath.trim() !== '') {
+      workspacePath = expandPath(workspacePath);
+    }
 
     console.error('');
     console.error('Telegram es opcional (Auto = omitir).');
@@ -318,7 +320,10 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
 
   const config = getDefaultConfig();
   writeEnvFile(repoRoot, config);
-  ensureWorkspaceExists(config.WORKSPACE_PATH);
+  
+  if (config.WORKSPACE_PATH !== '') {
+    ensureWorkspaceExists(config.WORKSPACE_PATH);
+  }
   
   console.error('[onboarding] Created default configuration in .env');
   return true;
@@ -344,10 +349,16 @@ export async function maybeRunOnboarding(
   }
 
   writeEnvFile(options.repoRoot, config);
-  ensureWorkspaceExists(config.WORKSPACE_PATH);
+  if (config.WORKSPACE_PATH !== '') {
+    ensureWorkspaceExists(config.WORKSPACE_PATH);
+  }
 
   console.error(`[onboarding] Configuration saved to .env`);
-  console.error(`[onboarding] Workspace: ${config.WORKSPACE_PATH}`);
+  if (config.WORKSPACE_PATH !== '') {
+    console.error(`[onboarding] Workspace: ${config.WORKSPACE_PATH}`);
+  } else {
+    console.error(`[onboarding] Workspace: <repo>/workspace (default)`);
+  }
   console.error('');
 
   return true;
