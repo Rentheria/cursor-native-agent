@@ -312,13 +312,14 @@ export async function runAgentTurn(
     // Build requests in safeMode require confirmation before using --force.
     // If not confirmed, return early asking for confirmation.
     if (isBuildRequest && safeMode && !confirmedForce) {
-      const confirmationReply = `⚠️ This looks like a build request that will write files under \`${workspacePath}/\`.
+      const confirmationReply = `⚠️ Esta solicitud va a escribir archivos bajo \`${workspacePath}/\`.
 
-Please confirm:
-- Type **/ok** or **confirm** to proceed with the build (runs with \`--force\`)
-- Type **/no** or **cancel** to cancel
+Por favor confirma:
+- **Confirmar** para proceder con la construcción (corre con \`--force\`)
+- **Cancelar** para cancelar
 
-The confirmation expires in 10 minutes.`;
+También podés usar los comandos **/ok** o **/no** como atajos.
+La confirmación expira en 10 minutos.`;
       
       // Do NOT persist confirmation prompt to thread
       const confirmResult: AgentTurnResult = {

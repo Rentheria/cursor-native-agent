@@ -289,6 +289,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async ({ onAssistantDelta }) => {
         onAssistantDelta?.('ho');
         onAssistantDelta?.('la');
@@ -299,7 +300,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'di hola' }),
       });
       assert.equal(res.status, 200);
@@ -323,6 +327,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async ({ onAssistantDelta }) => {
         // Segmento que cierra por tool call: cursor-agent lo repite completo.
         onAssistantDelta?.('Voy a revisar ');
@@ -339,7 +344,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'revisa el sistema' }),
       });
       const deltas = collectSseDeltas(await res.text());
@@ -355,6 +363,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => {
         throw new Error('boom from mock');
       },
@@ -363,7 +372,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'fail please' }),
       });
       assert.equal(res.status, 200);
@@ -379,6 +391,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => {
         throw new Error('should not run');
       },
@@ -387,7 +400,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: '   ' }),
       });
       assert.equal(res.status, 400);
@@ -402,6 +418,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
     });
     const baseUrl = await listen(server);
@@ -410,6 +427,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
           'Origin': 'http://evil.com',
         },
         body: JSON.stringify({ prompt: 'test' }),
@@ -426,6 +444,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
     });
     const baseUrl = await listen(server);
@@ -437,6 +456,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
           'Origin': `http://127.0.0.1:${port}`,
         },
         body: JSON.stringify({ prompt: 'test' }),
@@ -447,6 +467,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
           'Origin': `http://localhost:${port}`,
         },
         body: JSON.stringify({ prompt: 'test' }),
@@ -461,13 +482,17 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
     });
     const baseUrl = await listen(server);
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'test' }),
       });
       assert.equal(res.status, 200);
@@ -480,6 +505,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
     });
     const baseUrl = await listen(server);
@@ -487,7 +513,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
       const largePrompt = 'a'.repeat(300 * 1024);
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: largePrompt }),
       });
       assert.equal(res.status, 413);
@@ -508,6 +537,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => {
         if (!firstRunning) {
           firstRunning = true;
@@ -521,7 +551,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const first = fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'first' }),
       });
 
@@ -529,7 +562,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
 
       const second = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'second' }),
       });
 
@@ -548,6 +584,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({ reply: 'ok', stderr: '', exitCode: 0 }),
     });
     const baseUrl = await listen(server);
@@ -555,7 +592,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
       for (let i = 0; i < 10; i++) {
         const res = await fetch(`${baseUrl}/api/chat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Dashboard-Token': 'test-token',
+          },
           body: JSON.stringify({ prompt: `test ${i}` }),
         });
         assert.equal(res.status, 200);
@@ -564,7 +604,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
 
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'over limit' }),
       });
       assert.equal(res.status, 429);
@@ -579,6 +622,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({
         reply: '## Título\n\n**negrita** y *cursiva*',
         stderr: '',
@@ -589,7 +633,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'test markdown' }),
       });
       const text = await res.text();
@@ -617,6 +664,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({
         reply: '',
         stderr: 'Error line 1\nError line 2\nWorkspace Trust Required\n.../workspace\nPass --trust, --yolo, or -f if you trust this directory',
@@ -627,7 +675,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'test error' }),
       });
       assert.equal(res.status, 200);
@@ -645,6 +696,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const server = createDashboardServer({
       repoRoot: tmpRoot,
       chatEnabled: true,
+      dashboardToken: 'test-token',
       runChatTurn: async () => ({
         reply: '   ',
         stderr: 'Some warning\nAnother warning',
@@ -655,7 +707,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     try {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
         body: JSON.stringify({ prompt: 'test empty reply' }),
       });
       assert.equal(res.status, 200);

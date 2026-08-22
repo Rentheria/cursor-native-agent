@@ -333,7 +333,7 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
         const updatedContent = content.trimEnd() + `\nDASHBOARD_TOKEN=${newToken}\n`;
         writeFileSync(envPath, updatedContent, 'utf8');
         console.error('[onboarding] Generated DASHBOARD_TOKEN and added to .env');
-        console.error(`[onboarding] Dashboard token: ${newToken}`);
+        console.error('[onboarding] Dashboard token written to .env (open the file to see it)');
         return true;
       }
       return false;
@@ -348,7 +348,7 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
   }
   
   console.error('[onboarding] Created default configuration in .env');
-  console.error(`[onboarding] Dashboard token: ${config.DASHBOARD_TOKEN}`);
+  console.error('[onboarding] Dashboard token written to .env (open the file to see it)');
   return true;
 }
 
