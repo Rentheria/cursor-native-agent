@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # cron-tick.sh — entrypoint for system cron / systemd timers.
 # Install via user crontab or systemd timer; see README.md.
+# Forwards all arguments to `npm run cron` (e.g. --check-only).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -14,4 +15,4 @@ if [[ -s "${NVM_DIR}/nvm.sh" ]]; then
 fi
 export PATH="${HOME}/.local/bin:${PATH}"
 
-exec npm run cron
+exec npm run cron -- "$@"

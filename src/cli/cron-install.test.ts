@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   buildCronLine,
   uninstallCrontab,
@@ -54,6 +57,22 @@ describe('cron-install', () => {
         result.message.includes('No crontab found') ||
         result.message.includes('crontab command not found') ||
         result.message.includes('No cron job found'),
+      );
+    });
+  });
+
+  describe('cron-tick.sh wrapper', () => {
+    it('forwarded args al comando npm run cron', () => {
+      const repoRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../..',
+      );
+      const scriptPath = path.join(repoRoot, 'scripts', 'cron-tick.sh');
+      const scriptContent = readFileSync(scriptPath, 'utf8');
+      
+      assert.ok(
+        scriptContent.includes('npm run cron -- "$@"'),
+        'cron-tick.sh debe incluir "$@" para forward args',
       );
     });
   });
