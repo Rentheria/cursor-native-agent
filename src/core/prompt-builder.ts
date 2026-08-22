@@ -9,8 +9,9 @@ export function assemblePrompt(params: {
   readonly matchedSkills: readonly SkillDocument[];
   readonly memory: MemoryLoadResult;
   readonly workspacePath?: string;
+  readonly repoRoot?: string;
 }): AssembledPrompt {
-  const { userPrompt, matchedSkills, memory, workspacePath } = params;
+  const { userPrompt, matchedSkills, memory, workspacePath, repoRoot } = params;
   const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
   
   const sections: string[] = [
@@ -22,9 +23,14 @@ export function assemblePrompt(params: {
   ];
 
   if (workspacePath !== undefined) {
-    sections.push(`Current workspace path: \`${workspacePath}\``);
+    sections.push(`**Build workspace (WORKSPACE_PATH):** \`${workspacePath}\``);
+    sections.push(`**Repo root:** \`${repoRoot ?? '(not provided)'}\``);
     sections.push('');
-    sections.push('When building projects or apps, scaffold them in the workspace directory');
+    sections.push('When the user asks for "workspace path" / "path de trabajo" / "directorio de trabajo",');
+    sections.push(`answer with the build workspace path above (\`${workspacePath}\`), NOT the repo root.`);
+    sections.push('Do NOT invent paths like Documents or home directories.');
+    sections.push('');
+    sections.push('When building projects or apps, scaffold them in the build workspace directory');
     sections.push('(not the wrapper repo root). That directory is gitignored and is the');
     sections.push('designated space for user-requested code.');
     sections.push('');

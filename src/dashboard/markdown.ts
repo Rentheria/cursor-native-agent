@@ -14,7 +14,13 @@ import { escapeHtml } from './html.js';
  * All text is escaped to prevent XSS. No raw HTML is allowed.
  */
 export function renderMarkdown(text: string): string {
-  const lines = text.split('\n');
+  // Collapse 3+ consecutive newlines to 2; strip leading/trailing blank lines
+  const normalized = text
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\s*\n+/, '')
+    .replace(/\n+\s*$/, '');
+  
+  const lines = normalized.split('\n');
   const result: string[] = [];
   let inCodeBlock = false;
   let codeBlockLines: string[] = [];
@@ -55,7 +61,13 @@ export function renderMarkdown(text: string): string {
       } else {
         inCodeBlock = false;
         const code = codeBlockLines.join('\n');
-        result.push(`<pre><code class="language-${escapeHtml(codeBlockLang)}">${escapeHtml(code)}</code></pre>`);
+        // If code is a single short line with no language tag (likely a path/command), render as inline code
+        const isSingleShortLine = codeBlockLines.length === 1 && code.length < 80 && codeBlockLang === '';
+        if (isSingleShortLine) {
+          result.push(`<p><code>${escapeHtml(code)}</code></p>`);
+        } else {
+          result.push(`<pre><code class="language-${escapeHtml(codeBlockLang)}">${escapeHtml(code)}</code></pre>`);
+        }
         codeBlockLines = [];
         codeBlockLang = '';
         continue;
@@ -235,7 +247,17 @@ export function renderMarkdown(text: string): string {
     result.push('</ol>');
   }
 
-  return result.join('\n');
+  // Remove empty paragraphs and <br> between block elements
+  const html = result.join('\n');
+  return html
+    .replace(/<p>\s*<\/p>/g, '')
+    .replace(/<p>\s*<br>\s*<\/p>/g, '')
+    .replace(/<br>\n*<\/ul>/g, '</ul>')
+    .replace(/<br>\n*<\/ol>/g, '</ol>')
+    .replace(/<br>\n*<pre>/g, '<pre>')
+    .replace(/<\/pre>\n*<br>/g, '</pre>')
+    .replace(/<br>\n*<h([234])>/g, '<h$1')
+    .replace(/<\/h([234])>\n*<br>/g, '</h$1>');
 }
 
 function renderInline(text: string): string {

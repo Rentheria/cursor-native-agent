@@ -153,4 +153,46 @@ describe('renderMarkdown', () => {
     // Code should contain literal link markdown
     assert.match(output, /<code>code \[link\]\(url\)<\/code>/);
   });
+
+  it('debería_colapsar_múltiples_líneas_en_blanco', () => {
+    const input = 'Line 1\n\n\n\nLine 2\n\n\n\n\nLine 3';
+    const output = renderMarkdown(input);
+    // Should not have 3+ consecutive <br> or <p></p>
+    assert.doesNotMatch(output, /<br>\s*<br>\s*<br>/);
+    // Should have content for all three lines
+    assert.match(output, /Line 1/);
+    assert.match(output, /Line 2/);
+    assert.match(output, /Line 3/);
+  });
+
+  it('debería_eliminar_líneas_en_blanco_al_inicio_y_final', () => {
+    const input = '\n\n\nHola.\n\n\n';
+    const output = renderMarkdown(input);
+    // Should start with content, not empty tags
+    assert.match(output, /^<p>Hola\.<\/p>$/);
+  });
+
+  it('debería_eliminar_párrafos_vacíos', () => {
+    const input = 'Text\n\nMore text';
+    const output = renderMarkdown(input);
+    // Should not have empty <p></p> tags
+    assert.doesNotMatch(output, /<p>\s*<\/p>/);
+    assert.doesNotMatch(output, /<p>\s*<br>\s*<\/p>/);
+  });
+
+  it('debería_renderizar_código_corto_de_una_línea_como_inline', () => {
+    const input = '```\nsrc/utils/helpers.ts\n```';
+    const output = renderMarkdown(input);
+    // Single short line should be inline code, not a pre block
+    assert.match(output, /<p><code>src\/utils\/helpers\.ts<\/code><\/p>/);
+    assert.doesNotMatch(output, /<pre>/);
+  });
+
+  it('debería_renderizar_código_largo_como_bloque', () => {
+    const input = '```typescript\nfunction foo() {\n  return 42;\n}\n```';
+    const output = renderMarkdown(input);
+    // Multi-line code should be a pre block
+    assert.match(output, /<pre><code class="language-typescript">/);
+    assert.match(output, /function foo/);
+  });
 });

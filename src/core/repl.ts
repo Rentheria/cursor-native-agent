@@ -139,6 +139,7 @@ export async function runRepl(
           userPrompt: trimmed,
           matchedSkills,
           memory,
+          repoRoot,
         });
         promptToSend = assembled.finalPrompt;
         isFirstTurn = false;

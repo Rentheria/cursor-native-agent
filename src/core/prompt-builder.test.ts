@@ -23,6 +23,7 @@ describe('assemblePrompt', () => {
       userPrompt: 'Draft a commit for the skills loader',
       matchedSkills: [skill],
       memory,
+      repoRoot: '/workspace',
     });
 
     assert.match(assembled.finalPrompt, /Memory index/);
@@ -49,6 +50,7 @@ describe('assemblePrompt', () => {
       userPrompt: 'qué hace este repo',
       matchedSkills: [stagePitchSkill],
       memory,
+      repoRoot: '/workspace',
     });
 
     assert.match(assembled.finalPrompt, /CRITICAL OUTPUT CONSTRAINT/);
@@ -76,6 +78,7 @@ describe('assemblePrompt', () => {
       userPrompt: 'draft a commit',
       matchedSkills: [otherSkill],
       memory,
+      repoRoot: '/workspace',
     });
 
     assert.ok(!assembled.finalPrompt.includes('CRITICAL OUTPUT CONSTRAINT'));
@@ -93,9 +96,33 @@ describe('assemblePrompt', () => {
       userPrompt: 'random question',
       matchedSkills: [],
       memory,
+      repoRoot: '/workspace',
     });
 
     assert.ok(!assembled.finalPrompt.includes('CRITICAL OUTPUT CONSTRAINT'));
     assert.match(assembled.finalPrompt, /No skills matched/);
+  });
+
+  it('debería_incluir_workspace_path_y_repo_root_cuando_están_disponibles', () => {
+    const memory: MemoryLoadResult = {
+      indexMarkdown: '- README',
+      indexEntries: [],
+      details: [],
+    };
+
+    const assembled = assemblePrompt({
+      userPrompt: 'cuál es el workspace path',
+      matchedSkills: [],
+      memory,
+      workspacePath: '/workspace/build',
+      repoRoot: '/workspace',
+    });
+
+    assert.match(assembled.finalPrompt, /Build workspace \(WORKSPACE_PATH\)/);
+    assert.match(assembled.finalPrompt, /\/workspace\/build/);
+    assert.match(assembled.finalPrompt, /Repo root/);
+    assert.match(assembled.finalPrompt, /\/workspace/);
+    assert.match(assembled.finalPrompt, /workspace path.*path de trabajo.*directorio de trabajo/s);
+    assert.match(assembled.finalPrompt, /Do NOT invent paths/);
   });
 });
