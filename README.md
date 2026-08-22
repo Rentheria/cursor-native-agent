@@ -83,10 +83,19 @@ npm run setup
 
 # 3. Primer prompt
 npm run agent -- "summarize file MEMORY.md"
+
+# 4. (Opcional) Armar tick autónomo de salud
+npm run cron:install
 ```
 
 `npm run setup` crea `.env` con defaults seguros (modelo Composer 2.5 Fast,
 workspace en `<repo>/workspace`, Telegram omitido hasta que lo configures).
+
+**Paso opcional:** después de `npm run setup`, corriendo `npm run cron:install`
+arma un cron job que chequea la salud del repo cada día de semana (9:00 AM
+local, solo chequeo sin gastar modelo). Si configuraste Telegram, recibís
+notificación cuando hay errores/warnings; ticks READY quedan en silencio en
+`logs/cron.log`.
 
 Si `cursor-agent` no está en `PATH`, exporta `CURSOR_AGENT_BIN_PATH` o
 instálalo según las instrucciones que `npm run setup` imprime.
@@ -253,7 +262,52 @@ npm run cron -- --check-only                       # el mismo warn ahora sale co
 
 Modo `ask` = el agente **no** edita archivos.
 
-#### crontab de usuario (probado en vivo)
+#### Instalación automática (nuevo en semana 3)
+
+Un comando para armar un tick de salud en días de semana, mañana hora local:
+
+```bash
+npm run cron:install
+```
+
+Por defecto instala un cron que corre **lunes a viernes a las 9:00 AM** (hora
+local), con el flag `--check-only` para no gastar llamadas al modelo en ticks
+desatendidos. Solo el chequeo de salud (git + memoria + skills) corre; el
+agente no triage.
+
+**Notificaciones Telegram (opcional):** Si `TELEGRAM_BOT_TOKEN` y
+`TELEGRAM_ALLOWED_CHAT_IDS` están configurados en `.env`, el tick **manda un
+mensaje a Telegram solo cuando hay algo que reportar** (errores, warnings; no
+en ticks READY). Fail-closed: sin token o sin allowlist, no envía, no rompe.
+
+Para desinstalar:
+
+```bash
+npm run cron:uninstall
+```
+
+Personalizar schedule (p. ej. cada 30 minutos):
+
+```bash
+CURSOR_NATIVE_AGENT_CRON_SCHEDULE="*/30 * * * *" npm run cron:install
+```
+
+Requisitos: `cron` o `cronie` instalado. Si `crontab` no existe, el script
+sale con código ≠ 0 y un mensaje claro.
+
+Para verificar la instalación:
+
+```bash
+crontab -l
+```
+
+Deberías ver una línea con `cursor-native-agent <repoRoot>` seguida del comando
+que corre `scripts/cron-tick.sh --check-only`.
+
+#### crontab de usuario (instalación manual)
+
+Si prefieres instalar manualmente sin `npm run cron:install`, aquí un ejemplo
+cada hora en punto. Ajusta la ruta del repo y la versión de Node:
 
 Ejemplo cada hora en punto. Ajusta la ruta del repo y la versión de Node:
 
@@ -666,6 +720,8 @@ npm run setup                 # setup inicial (deps + .env + workspace/ + check 
 npm run agent -- "<prompt>"   # orquesta skills/memoria → cursor-agent -p
 npm run chat                  # REPL continuo
 npm run cron                  # tick autónomo (git trigger + cursor-agent)
+npm run cron:install          # instala cron job para ticks desatendidos (weekdays 9:00 AM)
+npm run cron:uninstall        # desinstala cron job
 npm run telegram              # bot Telegram (requiere TELEGRAM_BOT_TOKEN)
 npm run dashboard             # observatorio HTTP + chat (PORT, default 3847)
 npm run onboard               # configuración interactiva (modelo, workspace, Telegram)
