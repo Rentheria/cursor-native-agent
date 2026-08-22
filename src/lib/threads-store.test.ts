@@ -13,6 +13,7 @@ import {
   generateThreadId,
   getThreadsDir,
   MAX_MESSAGES_PER_THREAD,
+  MAX_THREAD_CONTEXT_CHARS,
   type Thread,
 } from './threads-store.js';
 
@@ -352,6 +353,84 @@ describe('appendToThread con defense in depth', () => {
       const loaded = await loadThread(repoRoot, 'auto-created-thread');
       assert.ok(loaded);
       assert.equal(loaded.messages.length, 1);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('buildThreadContext con límite de caracteres', () => {
+  it('respeta el límite de caracteres máximo', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Crear mensajes muy largos que excedan MAX_THREAD_CONTEXT_CHARS
+      const largeContent = 'X'.repeat(5000);
+      const thread = await createThread(repoRoot, largeContent);
+      await appendToThread(repoRoot, thread.id, 'assistant', largeContent);
+      await appendToThread(repoRoot, thread.id, 'user', largeContent);
+      await appendToThread(repoRoot, thread.id, 'assistant', largeContent);
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 10);
+      
+      // El contexto debe respetar el límite
+      assert.ok(
+        context.length <= MAX_THREAD_CONTEXT_CHARS,
+        `Context length ${context.length} exceeds MAX_THREAD_CONTEXT_CHARS ${MAX_THREAD_CONTEXT_CHARS}`,
+      );
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('incluye mensajes completos sin cortar a la mitad', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Crear varios mensajes
+      const thread = await createThread(repoRoot, 'Mensaje corto 1');
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Respuesta corta 1');
+      await appendToThread(repoRoot, thread.id, 'user', 'Mensaje corto 2');
+      
+      // Añadir un mensaje muy largo que hará que se alcance el límite
+      const largeContent = 'Z'.repeat(MAX_THREAD_CONTEXT_CHARS);
+      await appendToThread(repoRoot, thread.id, 'assistant', largeContent);
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 10);
+      
+      // El contexto debe respetar el límite
+      assert.ok(context.length <= MAX_THREAD_CONTEXT_CHARS);
+      
+      // No debe incluir el mensaje largo (porque no cabe completo)
+      assert.ok(!context.includes(largeContent));
+      
+      // Debe incluir los mensajes cortos que sí caben
+      assert.ok(context.includes('Mensaje corto'));
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('maneja correctamente múltiples mensajes dentro del límite', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Inicio');
+      
+      // Añadir varios mensajes pequeños
+      for (let i = 1; i <= 20; i++) {
+        await appendToThread(
+          repoRoot,
+          thread.id,
+          i % 2 === 0 ? 'assistant' : 'user',
+          `Mensaje ${i}`,
+        );
+      }
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 20);
+      
+      // El contexto debe respetar el límite
+      assert.ok(context.length <= MAX_THREAD_CONTEXT_CHARS);
+      
+      // Debe incluir el mensaje más reciente
+      assert.ok(context.includes('Mensaje 20'));
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }

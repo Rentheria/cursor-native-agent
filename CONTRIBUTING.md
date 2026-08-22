@@ -11,7 +11,7 @@ El repositorio es público. Podés clonarlo directamente:
 ```bash
 git clone https://github.com/Rentheria/cursor-native-agent.git
 cd cursor-native-agent
-npm install
+npm run setup  # instala deps, crea .env, verifica cursor-agent
 
 # Actualizar en sesiones futuras
 git pull
@@ -23,20 +23,12 @@ También podés usar el `gh` CLI si lo preferís:
 ```bash
 gh repo clone Rentheria/cursor-native-agent
 cd cursor-native-agent
-npm install
+npm run setup
 ```
 
-Confirm the engine is available before running prompts:
-
-| Sistema | Comando |
-|---|---|
-| **macOS / Linux / WSL** | `which cursor-agent` |
-| **Windows PowerShell** | `Get-Command cursor-agent` o `where cursor-agent` |
-
-Luego verifica versión y typecheck:
+Verify typecheck and tests:
 
 ```bash
-cursor-agent --version
 npm run typecheck
 npm test
 ```
@@ -106,12 +98,19 @@ Out of scope / please don’t:
 
 - Turning this into a generic multi-engine framework or adding fallback CLIs
   besides `cursor-agent`.
-- Embeddings / vector memory, multi-channel transports, or a web dashboard as
-  a surprise PR — those are open ideas (see README roadmap) but they change
-  the demo’s scope; discuss first.
 - Large refactors that bury the pattern under abstraction layers.
 - Copying private workspace code from elsewhere; replicate the *pattern*, not
   proprietary sources.
+- WhatsApp integration (requires Meta Business + HTTPS webhook; see ARCHITECTURE.md).
+- SaaS multi-tenant features (this is a personal localhost agent).
+
+Ideas open for discussion (open an issue first):
+
+- Alternative embeddings providers (TF-IDF local is default; custom module
+  extension point exists but no cloud providers are included).
+- Dashboard enhancements (current dashboard is minimal observability + chat;
+  richer UI would change demo scope).
+- Additional cron triggers beyond git status (e.g. commit age, log size).
 
 ## Pull request process
 
