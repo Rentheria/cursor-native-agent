@@ -1,11 +1,25 @@
 # Tutorial rápido — cursor-native-agent
 
-Guía corta para clonar, correr un prompt y no tropezar con los fallos que ya
-mordieron en vivo. Para el diseño completo: `README.md` y `ARCHITECTURE.md`.
+Guía corta para clonar, instalar y correr el primer prompt. Para el diseño
+completo: `README.md` y `ARCHITECTURE.md`.
 
 Outputs pegados aquí salieron de una pasada real el **2026-08-12** en este
 host (Node vía nvm, `cursor-agent` en `~/.local/bin`). Los tuyos pueden variar
 en versiones o timings; la forma de las líneas sí debe coincidir.
+
+## Quickstart (3 pasos)
+
+Si ya tienes Node ≥ 20 y `cursor-agent` instalado:
+
+```bash
+git clone https://github.com/Rentheria/cursor-native-agent.git
+cd cursor-native-agent
+npm run setup
+```
+
+`npm run setup` instala deps, chequea que `cursor-agent` esté disponible,
+crea `.env` con defaults seguros, y crea `workspace/` (directorio para
+proyectos de usuario). Al final imprime los tres comandos siguientes.
 
 ## Requisitos previos
 
@@ -98,97 +112,81 @@ cd cursor-native-agent
 
 ## Quickstart
 
-Una vez dentro del directorio clonado:
+Una vez dentro del directorio clonado (después de `git clone …`):
 
 ```bash
-npm install
+npm run setup
 ```
 
-Salida real de `npm install` (deps ya en caché):
+Salida esperada (cursor-agent presente):
 
 ```text
+=== cursor-native-agent setup ===
+
+[setup] Installing dependencies...
 up to date, audited 7 packages in 415ms
 
 found 0 vulnerabilities
+[setup] Creating default configuration...
+[onboarding] Created default configuration in .env
+[setup] cursor-agent found: /home/you/.local/bin/cursor-agent
+[setup] Creating workspace/ directory...
+[setup] Created /home/you/cursor-native-agent/workspace
+
+✅ Setup complete!
+
+Next steps:
+
+  1. Try the agent with a prompt:
+     npm run agent -- "summarize file MEMORY.md"
+
+  2. Start the dashboard (includes chat):
+     npm run dashboard
+     Then open http://127.0.0.1:3847
+
+  3. Optional: Configure Telegram bot
+     npm run onboard
+     (or set TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_CHAT_IDS)
+
+Learn more: README.md and TUTORIAL.md
 ```
 
-Verifica que `cursor-agent` esté disponible:
+Si cursor-agent no está en PATH, verás instrucciones de instalación y el
+script saldrá con código no-cero. Instala `cursor-agent` según tu sistema
+operativo (ver sección anterior) y vuelve a correr `npm run setup`.
+
+### Primer prompt
+
+Ahora que `npm run setup` completó, prueba el agente:
 
 ```bash
-which cursor-agent
-cursor-agent --version
+npm run agent -- "summarize file MEMORY.md"
 ```
 
-```text
-/home/you/.local/bin/cursor-agent
-2026.08.11-e8db854
-```
-
-### Configuración inicial (onboarding)
-
-En el primer uso interactivo (`npm run agent`, `npm run dashboard`, `npm run cron`,
-o `npm run telegram`), el CLI pregunta la configuración básica y la guarda en `.env`:
-
-- **Modelo**: Elige Auto (default: `composer-2.5-fast`) o Personalizado (ingresa el ID del modelo)
-- **Puerto** del dashboard: Elige Auto (default: `3847`) o Personalizado (rango 1024-65535)
-- **Chat** en dashboard: Elige Auto (default: habilitado) o Personalizado (1=sí, 0=no)
-- **Workspace**: Elige Auto (default: `<repo>/workspace` — la carpeta gitignored dentro del repo)
-  o Personalizado (ingresa ruta absoluta o relativa al repo; `~` se expande al home del usuario)
-- **Telegram** (opcional, Elige Auto = omitir o Personalizado = configurar)
-
-Presiona Enter en cada pregunta para Auto (acepta el default). El onboarding:
-
-- Se ejecuta **una vez**: crea `.env` con el marcador `CURSOR_NATIVE_AGENT_ONBOARDED=1`.
-- **No** se ejecuta en `npm test` / `npm run typecheck` / `npm run build`.
-- Se salta en CI (variable `CI=true`), sin TTY, o si se pasa `--yes`.
-- Se puede re-ejecutar con `npm run onboard`.
-
-Ejemplo de sesión:
-
-```bash
-npm run agent -- "resume MEMORY.md"
-```
-
-```text
-=== Bienvenido a cursor-native-agent ===
-Configuración inicial. Presiona Enter para Auto o elige Personalizado.
-
-Modelo [auto/personalizado] (Enter = auto → composer-2.5-fast):
-Puerto [auto/personalizado] (Enter = auto → 3847):
-Chat en dashboard [auto/personalizado] (Enter = auto → 1):
-Workspace [auto/personalizado] (Enter = auto → ):
-
-Telegram es opcional (Auto = omitir).
-Configurar Telegram? [auto/personalizado] (Enter = auto → omitir):
-
-Configuración completada. Guardando en .env...
-[onboarding] Configuration saved to .env
-[onboarding] Workspace:
-
-[agent] Loading skills…
-...
-```
-
-En ejecuciones futuras, el onboarding se salta automáticamente.
-
-Primer prompt (dispara skill + memoria):
-
-```bash
-npm run agent -- "summarize file MEMORY.md and remind me about house git rules for commits"
-```
+Salida esperada:
 
 ```text
 [agent] Loading skills…
 [agent] Skills loaded: 8; matched: summarize-file
 [agent] Loading memory index + relevant details…
-[agent] Memory index entries: 2; details loaded: agent-architecture, house-git-rules
+[agent] Memory index entries: 2; details loaded: agent-architecture
 [agent] Calling cursor-agent -p …
 …
 ```
 
-Si ves `matched: summarize-file` y `details loaded: …house-git-rules`, el
-orquestador está armando contexto bien. El párrafo final lo escribe
-`cursor-agent`.
+Si ves `matched: summarize-file` y `details loaded: …`, el orquestador está
+armando contexto correctamente. El párrafo final lo escribe `cursor-agent`.
+
+**Configuración interactiva (opcional):** `npm run setup` usa defaults
+automáticos (Composer 2.5 Fast, puerto 3847, workspace en `<repo>/workspace`,
+Telegram omitido). Para personalizar interactivamente (elegir otro modelo,
+configurar Telegram, etc.), corre:
+
+```bash
+npm run onboard
+```
+
+Esto sobrescribe `.env` con tus elecciones.
 
 **Nota sobre matching de skills:** el loader intenta **primero match exacto**
 de trigger (palabras/frases completas, no subcadenas). Si ningún trigger
@@ -227,6 +225,7 @@ alcance, cómo correrlo). Prompts bien especificados construyen directamente sin
 
 | Comando | Qué hace | Env vars |
 |---|---|---|
+| `npm run setup` | Instala deps, crea .env, chequea cursor-agent, crea workspace/ | Ninguna requerida |
 | `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (default: composer-2.5-fast; seteá a `auto` para Auto), `CURSOR_NATIVE_AGENT_DEBUG=1` |
 | `npm run dashboard` | Observatorio HTTP en `127.0.0.1` (logs + MEMORY + chat) | `PORT` (default `3847`). Chat habilitado por defecto; `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para solo lectura |
 | `npm run cron` / `scripts/cron-tick.sh` | Health check real + triage en modo `ask` (Linux/macOS) | Wrapper carga nvm/`~/.local/bin`. Systemd (Linux): setea `HOME` y `PATH` (ver abajo) |

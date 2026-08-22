@@ -11,6 +11,7 @@
     "cursor-native-agent": "./dist/core/index.js"
   },
   "scripts": {
+    "setup": "tsx src/cli/setup.ts",
     "agent": "tsx src/core/index.ts",
     "chat": "tsx src/core/index.ts --interactive",
     "cron": "tsx src/orchestration/cron-tick.ts",
