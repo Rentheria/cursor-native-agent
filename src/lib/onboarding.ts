@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output, env as processEnv } from 'node:process';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { homedir } from 'node:os';
 
@@ -17,6 +18,7 @@ export interface OnboardingConfig {
   readonly TELEGRAM_ALLOWED_CHAT_IDS: string;
   readonly CURSOR_NATIVE_AGENT_DEBUG: string;
   readonly CURSOR_NATIVE_AGENT_ONBOARDED: string;
+  readonly DASHBOARD_TOKEN: string;
 }
 
 export interface OnboardingOptions {
@@ -237,10 +239,18 @@ export async function runInteractiveOnboarding(): Promise<OnboardingConfig> {
       TELEGRAM_ALLOWED_CHAT_IDS: telegramChatIds,
       CURSOR_NATIVE_AGENT_DEBUG: '0',
       CURSOR_NATIVE_AGENT_ONBOARDED: '1',
+      DASHBOARD_TOKEN: generateDashboardToken(),
     };
   } finally {
     rl.close();
   }
+}
+
+/**
+ * Generates a cryptographically random token for dashboard authentication.
+ */
+export function generateDashboardToken(): string {
+  return randomBytes(32).toString('base64url');
 }
 
 /**
@@ -260,6 +270,7 @@ export function getDefaultConfig(): OnboardingConfig {
     TELEGRAM_ALLOWED_CHAT_IDS: '',
     CURSOR_NATIVE_AGENT_DEBUG: '0',
     CURSOR_NATIVE_AGENT_ONBOARDED: '1',
+    DASHBOARD_TOKEN: generateDashboardToken(),
   };
 }
 
@@ -289,6 +300,7 @@ export function writeEnvFile(repoRoot: string, config: OnboardingConfig): void {
     lines.push(`TELEGRAM_ALLOWED_CHAT_IDS=${config.TELEGRAM_ALLOWED_CHAT_IDS}`);
   }
 
+  lines.push(`DASHBOARD_TOKEN=${config.DASHBOARD_TOKEN}`);
   lines.push(`CURSOR_NATIVE_AGENT_DEBUG=${config.CURSOR_NATIVE_AGENT_DEBUG}`);
   lines.push(`${ONBOARDED_MARKER}=${config.CURSOR_NATIVE_AGENT_ONBOARDED}`);
   lines.push('');
@@ -307,6 +319,7 @@ export function ensureWorkspaceExists(workspacePath: string): void {
  * Ensures .env exists with default config, never prompting.
  * Used for one-shot agent runs that should not block on interactive onboarding.
  * Returns true if .env was written, false if it already existed.
+ * If DASHBOARD_TOKEN is missing, generates and writes one.
  */
 export function ensureDefaultConfig(repoRoot: string): boolean {
   const envPath = path.join(repoRoot, '.env');
@@ -314,6 +327,15 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
   if (existsSync(envPath)) {
     const content = readFileSync(envPath, 'utf8');
     if (content.includes(`${ONBOARDED_MARKER}=1`)) {
+      const hasDashboardToken = /^DASHBOARD_TOKEN=.+$/m.test(content);
+      if (!hasDashboardToken) {
+        const newToken = generateDashboardToken();
+        const updatedContent = content.trimEnd() + `\nDASHBOARD_TOKEN=${newToken}\n`;
+        writeFileSync(envPath, updatedContent, 'utf8');
+        console.error('[onboarding] Generated DASHBOARD_TOKEN and added to .env');
+        console.error(`[onboarding] Dashboard token: ${newToken}`);
+        return true;
+      }
       return false;
     }
   }
@@ -326,6 +348,7 @@ export function ensureDefaultConfig(repoRoot: string): boolean {
   }
   
   console.error('[onboarding] Created default configuration in .env');
+  console.error(`[onboarding] Dashboard token: ${config.DASHBOARD_TOKEN}`);
   return true;
 }
 
