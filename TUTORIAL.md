@@ -18,8 +18,11 @@ npm run setup
 ```
 
 `npm run setup` instala deps, chequea que `cursor-agent` esté disponible,
-crea `.env` con defaults seguros, y crea `workspace/` (directorio para
-proyectos de usuario). Al final imprime los tres comandos siguientes.
+crea `.env` con defaults seguros. Si corrés con TTY, te pregunta dónde querés
+el workspace (Auto = `<repo>/workspace`, Personalizado = path absoluto).
+Si `WORKSPACE_PATH` en `.env` queda vacío o ausente, el agente usa `<repo>/workspace`;
+si seteás un path, el agente usa ese. Al final `npm run setup` imprime los tres
+comandos siguientes.
 
 **Para uso personal:** Este es un agente download-and-run (cada quien en su
 máquina). Dashboard solo en `127.0.0.1`; token en `.env`; confirm before writes.

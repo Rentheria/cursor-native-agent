@@ -358,6 +358,7 @@ La confirmación expira en 10 minutos.`;
       userPrompt: effectivePrompt,
       matchedSkills,
       memory,
+      workspacePath,
     });
     
     // Build requests get workspace cwd and --force (either CLI or confirmed safeMode).
@@ -456,6 +457,7 @@ async function runDelegatedTurn(params: {
     }),
     matchedSkills: params.matchedSkills,
     memory: params.memory,
+    workspacePath: resolveWorkspacePath(params.repoRoot),
   });
 
   console.error('[agent] Calling parent cursor-agent to report worker result…');

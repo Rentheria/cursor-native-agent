@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+import { homedir } from 'node:os';
 
 import { loadRepoEnv } from '../lib/load-env.js';
 import { ensureDefaultConfig } from '../lib/onboarding.js';
 import { resolveCursorAgentBinary } from '../lib/resolve-cursor-agent.js';
+import { WORKSPACE_PATH_ENV } from '../lib/constants.js';
 
 interface SetupOptions {
   readonly repoRoot: string;
@@ -37,6 +41,85 @@ Requirements:
     Install: curl https://cursor.com/install -fsS | bash
     Login: cursor-agent login
 `);
+}
+
+/**
+ * Expands tilde in paths and returns an absolute path.
+ */
+function expandPath(inputPath: string): string {
+  if (inputPath.startsWith('~')) {
+    return path.join(homedir(), inputPath.slice(1));
+  }
+  if (path.isAbsolute(inputPath)) {
+    return inputPath;
+  }
+  return path.resolve(inputPath);
+}
+
+/**
+ * Prompts the user to configure workspace path (Auto = empty/repo workspace, Personalizado = custom path).
+ * Returns the workspace path to write to .env (empty string for default).
+ */
+async function promptForWorkspacePath(): Promise<string> {
+  const rl = createInterface({ input, output });
+  try {
+    console.error('');
+    console.error('Configuración de workspace (donde se construyen proyectos):');
+    const choice = await rl.question(
+      'Workspace [auto/personalizado] (Enter = auto → <repo>/workspace): ',
+    );
+    const trimmed = choice.trim().toLowerCase();
+
+    if (trimmed === '' || trimmed === 'auto' || trimmed === 'a') {
+      return '';
+    }
+
+    if (trimmed === 'personalizado' || trimmed === 'p') {
+      let customPath = await rl.question('  Ruta absoluta o relativa al repo (vacío = <repo>/workspace): ');
+      customPath = customPath.trim();
+      if (customPath === '') {
+        return '';
+      }
+      return expandPath(customPath);
+    }
+
+    return '';
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Updates the WORKSPACE_PATH in .env (or adds it if missing).
+ * If value is empty string, removes WORKSPACE_PATH line or writes it as empty.
+ */
+function updateWorkspacePathInEnv(repoRoot: string, workspacePath: string): void {
+  const envPath = path.join(repoRoot, '.env');
+  if (!existsSync(envPath)) {
+    return;
+  }
+
+  const content = readFileSync(envPath, 'utf8');
+  const lines = content.split(/\r?\n/);
+  let found = false;
+  const updatedLines = lines.map((line) => {
+    if (line.startsWith('WORKSPACE_PATH=')) {
+      found = true;
+      return `WORKSPACE_PATH=${workspacePath}`;
+    }
+    return line;
+  });
+
+  if (!found) {
+    const insertIndex = updatedLines.findIndex((line) => line.startsWith('CURSOR_NATIVE_AGENT_ONBOARDED='));
+    if (insertIndex >= 0) {
+      updatedLines.splice(insertIndex, 0, `WORKSPACE_PATH=${workspacePath}`);
+    } else {
+      updatedLines.push(`WORKSPACE_PATH=${workspacePath}`);
+    }
+  }
+
+  writeFileSync(envPath, updatedLines.join('\n'), 'utf8');
 }
 
 function checkNodeVersion(): void {
@@ -117,14 +200,31 @@ function printCursorAgentInstallInstructions(): void {
   console.error('');
 }
 
+/**
+ * Resolves the workspace path from env or defaults to repoRoot/workspace.
+ */
+function resolveWorkspacePath(
+  repoRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const envPath = env[WORKSPACE_PATH_ENV];
+  if (envPath !== undefined && envPath.trim() !== '') {
+    return path.isAbsolute(envPath) ? envPath : path.resolve(repoRoot, envPath);
+  }
+  return path.join(repoRoot, 'workspace');
+}
+
+/**
+ * Ensures the resolved workspace directory exists.
+ */
 function ensureWorkspaceDir(repoRoot: string): void {
-  const workspacePath = path.join(repoRoot, 'workspace');
+  const workspacePath = resolveWorkspacePath(repoRoot);
   if (existsSync(workspacePath)) {
     console.error('[setup] Workspace directory already exists');
     return;
   }
 
-  console.error('[setup] Creating workspace/ directory...');
+  console.error('[setup] Creating workspace directory...');
   mkdirSync(workspacePath, { recursive: true });
   console.error(`[setup] Created ${workspacePath}`);
 }
@@ -190,6 +290,21 @@ async function runSetup(options: SetupOptions): Promise<void> {
   const created = ensureDefaultConfig(repoRoot);
   if (!created) {
     console.error('[setup] Configuration already exists');
+  }
+
+  // Interactive workspace path prompt if TTY and .env exists
+  const envPath = path.join(repoRoot, '.env');
+  if (input.isTTY && existsSync(envPath)) {
+    const content = readFileSync(envPath, 'utf8');
+    const hasWorkspacePath = /^WORKSPACE_PATH=.+$/m.test(content);
+    
+    // Only prompt if WORKSPACE_PATH is missing or ask if user wants to update
+    if (!hasWorkspacePath) {
+      console.error('[setup] WORKSPACE_PATH no está configurado en .env');
+      const workspacePath = await promptForWorkspacePath();
+      updateWorkspacePathInEnv(repoRoot, workspacePath);
+      console.error(`[setup] WORKSPACE_PATH guardado en .env: ${workspacePath === '' ? '<repo>/workspace (default)' : workspacePath}`);
+    }
   }
 
   const cursorAgentCheck = checkCursorAgent();

@@ -133,7 +133,7 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.match(sent.prompt, /### Skill: git-commit/);
     assert.match(sent.prompt, /Cuerpo de la skill git-commit/);
     assert.match(sent.prompt, /## User request\n\nhaz un commit con lo que hay$/);
-    assert.match(sent.prompt, /workspace\/.*directory/is);
+    assert.match(sent.prompt, /workspace/i);
 
     assert.deepEqual(result, {
       reply: 'respuesta del agente',

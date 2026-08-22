@@ -8,8 +8,9 @@ export function assemblePrompt(params: {
   readonly userPrompt: string;
   readonly matchedSkills: readonly SkillDocument[];
   readonly memory: MemoryLoadResult;
+  readonly workspacePath?: string;
 }): AssembledPrompt {
-  const { userPrompt, matchedSkills, memory } = params;
+  const { userPrompt, matchedSkills, memory, workspacePath } = params;
   const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
   
   const sections: string[] = [
@@ -18,11 +19,21 @@ export function assemblePrompt(params: {
     'You are running as the Cursor-native agent brain. Follow any injected skill',
     'instructions. Use memory only as background context; prefer the user request.',
     '',
-    'When building projects or apps, scaffold them in the `workspace/` directory (not',
-    'the wrapper repo root). That directory is gitignored and is the designated space',
-    'for user-requested code.',
-    '',
   ];
+
+  if (workspacePath !== undefined) {
+    sections.push(`Current workspace path: \`${workspacePath}\``);
+    sections.push('');
+    sections.push('When building projects or apps, scaffold them in the workspace directory');
+    sections.push('(not the wrapper repo root). That directory is gitignored and is the');
+    sections.push('designated space for user-requested code.');
+    sections.push('');
+  } else {
+    sections.push('When building projects or apps, scaffold them in the `workspace/` directory (not');
+    sections.push('the wrapper repo root). That directory is gitignored and is the designated space');
+    sections.push('for user-requested code.');
+    sections.push('');
+  }
 
   if (hasStagePitch) {
     sections.push('## CRITICAL OUTPUT CONSTRAINT (stage-pitch active)');
