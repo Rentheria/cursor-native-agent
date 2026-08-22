@@ -248,7 +248,8 @@ export function renderMarkdown(text: string): string {
   }
 
   // Remove empty paragraphs and <br> between block elements
-  const html = result.join('\n');
+  // Join without newlines since CSS white-space:normal will handle spacing
+  const html = result.join('');
   return html
     .replace(/<p>\s*<\/p>/g, '')
     .replace(/<p>\s*<br>\s*<\/p>/g, '')

@@ -968,6 +968,7 @@ function chatStyles(): string {
       color: var(--ink);
       border: 1px solid var(--line);
       border-bottom-left-radius: 0.35rem;
+      white-space: normal;
     }
     .chat-bubble.assistant.streaming::after {
       content: "";
@@ -984,6 +985,7 @@ function chatStyles(): string {
       color: #6b2a22;
       border: 1px solid color-mix(in srgb, #6b2a22 25%, var(--line));
       border-bottom-left-radius: 0.35rem;
+      white-space: normal;
     }
     .composer {
       padding: 0.65rem 1.15rem 1rem;
