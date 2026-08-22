@@ -14,19 +14,27 @@ meetup (27-ago-2026). Quitá esa línea, seteala a `auto`, o exportá tu propio
 modelo con `CURSOR_AGENT_MODEL=<id>` (correlo con `cursor-agent models` para
 ver IDs disponibles) — si está vacía o ausente, cursor-agent usa Auto.
 
-**Cómo empezar:** **[TUTORIAL.md](./TUTORIAL.md)** ← empieza aquí. Incluye
-instalación del Cursor CLI, login, clonar el repo, `npm install`,
-y tu primer prompt.
+**Cómo empezar en 3 pasos:**
+
+```bash
+git clone https://github.com/Rentheria/cursor-native-agent.git
+cd cursor-native-agent
+npm run setup
+```
+
+Requisitos: Node ≥ 20 y `cursor-agent` instalado ([ver abajo](#instalación-rápida)).
+
+Para el walkthrough completo: [TUTORIAL.md](./TUTORIAL.md).
 
 **Cursor no distribuye este producto.** Es un wrapper de ejemplo alrededor del
 CLI que vive fuera del IDE. En el IDE trabajas en un repo; esto es el agente
 como su propia cosa, autenticado como tú, con markdown skills + memoria lazy +
 opcional Telegram/cron/dashboard.
 
-## Demo pública
+## Origen y demo
 
-Este repo nació como demo para el **Cursor Meetup GDL del 27-ago-2026**. La
-demo es el motivo por el que existe, pero funciona igual clonado en cualquier repo.
+Este repo nació como demo pública para el Cursor Meetup GDL del 27-ago-2026,
+pero funciona como agente general clonado en cualquier repo.
 
 ## Cursor Plugin (local)
 
@@ -54,30 +62,40 @@ No hace falta tocar TypeScript para cambiar el comportamiento del agente.
 
 ## Instalación rápida
 
-**Sigue [TUTORIAL.md](./TUTORIAL.md) para el walkthrough completo.** Resumen:
+### Requisitos previos
 
-1. **Node ≥ 20** (probado con Node 22+)
-2. **Cursor CLI:** instala según tu sistema operativo:
+1. **Node.js ≥ 20** (probado con Node 22+)
+2. **Cursor CLI:**
    - macOS / Linux / WSL: `curl https://cursor.com/install -fsS | bash`
    - Windows PowerShell: `irm 'https://cursor.com/install?win32=true' | iex`
    - Docs: [cursor.com/docs/cli/installation](https://cursor.com/docs/cli/installation)
 3. **Login:** `cursor-agent login` (abre navegador)
-4. **Clonar:** `git clone https://github.com/Rentheria/cursor-native-agent.git` o con `gh` CLI
-5. **Deps:** `npm install`
-6. **Primer prompt:**
+
+### Setup en un comando
 
 ```bash
-npm run agent -- "summarize file MEMORY.md and remind me about house git rules for commits"
+# 1. Clonar el repo
+git clone https://github.com/Rentheria/cursor-native-agent.git
+cd cursor-native-agent
+
+# 2. Instalar y configurar (chequea deps + cursor-agent + crea .env y workspace/)
+npm run setup
+
+# 3. Primer prompt
+npm run agent -- "summarize file MEMORY.md"
 ```
 
-Si `cursor-agent` no está en `PATH`, exporta `CURSOR_AGENT_BIN_PATH` (ver `.env.example`).
+`npm run setup` crea `.env` con defaults seguros (modelo Composer 2.5 Fast,
+workspace en `<repo>/workspace`, Telegram omitido hasta que lo configures).
 
-**Variables de entorno:** el repo carga `.env.example` (defaults seguros) y
-luego `.env` (overrides locales). **No necesitas crear `.env` para empezar** —
-el proyecto funciona out of the box con Composer 2.5 Fast (pinneado para
-consistencia en la demo del meetup). Los exports del shell ganan sobre ambos
-archivos. Copia `.env.example` → `.env` solo si quieres personalizar algo (Unix:
-`cp .env.example .env`, Windows: `copy .env.example .env`):
+Si `cursor-agent` no está en `PATH`, exporta `CURSOR_AGENT_BIN_PATH` o
+instálalo según las instrucciones que `npm run setup` imprime.
+
+**Variables de entorno:** `npm run setup` crea `.env` automáticamente con
+defaults seguros (Composer 2.5 Fast, puerto 3847, chat habilitado, workspace
+en `<repo>/workspace`, Telegram omitido). Los exports del shell ganan sobre
+el archivo. Para personalizar, edita `.env` directamente o corre
+`npm run onboard` para el flujo interactivo:
 
 **Cambiar modelo:** el default es Composer 2.5 Fast (`CURSOR_AGENT_MODEL=composer-2.5-fast`
 en `.env.example`). Para usar otro modelo, exportá `CURSOR_AGENT_MODEL=<id>` en
@@ -86,12 +104,14 @@ cursor-agent use Auto (su default sin `--model`). Lista de IDs:
 `cursor-agent models`.
 
 Telegram requiere config obligatoria (`TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_ALLOWED_CHAT_IDS`) — el bot falla cerrado sin esas vars.
+`TELEGRAM_ALLOWED_CHAT_IDS`) — el bot falla cerrado sin esas vars. Configúralo
+con `npm run onboard` o exportando las vars directamente.
 
-Instalación global opcional (comando `cursor-native-agent` en cualquier
-directorio):
+Instalación global opcional (comando `cursor-native-agent` disponible en
+cualquier directorio):
 
 ```bash
+npm run build        # compila TypeScript a dist/
 npm install -g .
 cursor-native-agent --interactive
 ```
@@ -635,18 +655,20 @@ Ver también “Fuera de alcance” en `ARCHITECTURE.md` y [`CONTRIBUTING.md`](.
 ## Comandos de referencia
 
 ```bash
-npm install
+npm run setup                 # setup inicial (deps + .env + workspace/ + check cursor-agent)
 npm run agent -- "<prompt>"   # orquesta skills/memoria → cursor-agent -p
 npm run chat                  # REPL continuo
 npm run cron                  # tick autónomo (git trigger + cursor-agent)
 npm run telegram              # bot Telegram (requiere TELEGRAM_BOT_TOKEN)
-npm run dashboard             # observatorio HTTP read-only (PORT, default 3847)
+npm run dashboard             # observatorio HTTP + chat (PORT, default 3847)
+npm run onboard               # configuración interactiva (modelo, workspace, Telegram)
 npm run typecheck             # tsc --noEmit
+npm run build                 # tsc (compila a dist/)
 npm test                      # node:test en serie (--test-concurrency=1)
 ```
 
-## Origen
+---
 
-Este repo nació como demo pública para el Cursor Meetup GDL del 27-ago-2026,
-donde se usa como ejemplo en vivo. La demo es el motivo por el que existe, no un
-requisito para usarlo: funciona igual clonado en cualquier repo.
+**Nota sobre el origen:** Este repo se creó para el Cursor Meetup GDL del
+27-ago-2026 como demo en vivo, pero funciona como agente general clonado en
+cualquier proyecto.
