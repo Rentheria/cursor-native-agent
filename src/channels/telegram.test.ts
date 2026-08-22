@@ -572,13 +572,135 @@ describe('Telegram safeMode', () => {
   });
 });
 
+describe('Telegram confirmación de build', () => {
+  it('debería_pedir_confirmación_cuando_requiresForceConfirmation_es_true', async () => {
+    const sent: string[] = [];
+    const api = createTelegramApi({
+      token: 't',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        sent.push(body.text);
+        return jsonResponse({
+          ok: true,
+          result: { message_id: 1, chat: { id: 555 }, text: body.text },
+        });
+      },
+    });
+
+    await dispatchInboundMessage({
+      inbound: {
+        updateId: 1,
+        messageId: 1,
+        chatId: 555,
+        text: 'haz una calculadora',
+        fromUserId: 1,
+        fromUsername: 'demo',
+      },
+      api,
+      allowlist: allowlistOf({ chats: [555] }),
+      processInbound: async () => {
+        return {
+          reply: 'Por favor confirma el build',
+          stderr: '',
+          exitCode: 0,
+          requiresForceConfirmation: true,
+        };
+      },
+    });
+
+    assert.equal(sent.length, 1);
+    assert.match(sent[0] ?? '', /confirma/);
+  });
+
+  it('debería_manejar_ok_confirmando_el_build_pendiente', async () => {
+    const sent: string[] = [];
+    const api = createTelegramApi({
+      token: 't',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        sent.push(body.text);
+        return jsonResponse({
+          ok: true,
+          result: { message_id: 1, chat: { id: 888 }, text: body.text },
+        });
+      },
+    });
+
+    await dispatchInboundMessage({
+      inbound: {
+        updateId: 1,
+        messageId: 1,
+        chatId: 888,
+        text: '/ok',
+        fromUserId: 1,
+        fromUsername: 'demo',
+      },
+      api,
+      allowlist: allowlistOf({ chats: [888], repoRoot: '/test/repo' }),
+      processInbound: async () => {
+        return {
+          reply: 'Build confirmado y ejecutado',
+          stderr: '',
+          exitCode: 0,
+        };
+      },
+    });
+
+    // /ok without pending confirmation should show error
+    assert.match(sent[0] ?? '', /No pending build confirmation/);
+  });
+
+  it('debería_manejar_no_cancelando_el_build_pendiente', async () => {
+    const sent: string[] = [];
+    const api = createTelegramApi({
+      token: 't',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        sent.push(body.text);
+        return jsonResponse({
+          ok: true,
+          result: { message_id: 1, chat: { id: 999 }, text: body.text },
+        });
+      },
+    });
+
+    await dispatchInboundMessage({
+      inbound: {
+        updateId: 1,
+        messageId: 1,
+        chatId: 999,
+        text: '/no',
+        fromUserId: 1,
+        fromUsername: 'demo',
+      },
+      api,
+      allowlist: allowlistOf({ chats: [999] }),
+      processInbound: async () => {
+        return {
+          reply: 'nunca',
+          stderr: '',
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(sent.length, 1);
+    assert.match(sent[0] ?? '', /cancelled/i);
+  });
+});
+
 function allowlistOf(params: {
   readonly chats: readonly number[];
   readonly users?: readonly number[];
+  readonly repoRoot?: string;
 }): TelegramAllowlist {
   return {
     chatIds: new Set(params.chats),
     userIds: new Set(params.users ?? []),
+    repoRoot: params.repoRoot,
   };
 }
 

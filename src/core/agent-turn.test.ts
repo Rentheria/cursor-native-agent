@@ -316,9 +316,8 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.equal(result.reply, 'respuesta segura');
   });
 
-  it('debería_usar_workspace_con_force_en_modo_seguro_cuando_hay_build_intent', async () => {
+  it('debería_pedir_confirmación_en_safeMode_cuando_hay_build_intent', async () => {
     const repoRoot = await makeRepo();
-    const workspacePath = path.join(repoRoot, 'workspace');
     const { runAgent, calls } = fakeRunner('calculadora creada');
 
     const result = await runAgentTurn({
@@ -328,13 +327,10 @@ describe('runAgentTurn (pipeline directo)', () => {
       safeMode: true,
     });
 
-    assert.equal(calls.length, 1);
-    const sent = calls[0];
-    assert.ok(sent !== undefined);
-    assert.equal(sent.cwd, workspacePath, 'Safe mode with build intent should use workspace as cwd');
-    assert.equal(sent.force, true, 'Safe mode with build intent should use force');
-    assert.equal(sent.trust, true, 'Safe mode should use trust');
-    assert.equal(result.reply, 'calculadora creada');
+    assert.equal(calls.length, 0, 'Safe mode with build intent should NOT call agent before confirmation');
+    assert.match(result.reply, /looks like a build request/i);
+    assert.match(result.reply, /\/ok/);
+    assert.equal(result.requiresForceConfirmation, true);
   });
 
   it('debería_usar_workspace_cuando_matchea_skill_clarify_build', async () => {
@@ -786,5 +782,88 @@ describe('runAgentTurn (git safety guard)', () => {
 
     assert.equal(calls.length, 1, 'Should call cursor-agent when git-commit matches and .git exists');
     assert.equal(result.reply, 'commit creado');
+  });
+});
+
+describe('runAgentTurn (confirmación de --force en safeMode)', () => {
+  it('debería_pedir_confirmación_para_un_build_en_safeMode', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('no debería llamarse');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora',
+      runAgent,
+      safeMode: true,
+    });
+
+    assert.equal(calls.length, 0, 'No debería llamar a cursor-agent antes de confirmación');
+    assert.match(result.reply, /looks like a build request/i);
+    assert.match(result.reply, /\/ok/);
+    assert.match(result.reply, /\/no/);
+    assert.equal(result.requiresForceConfirmation, true);
+    assert.equal(result.exitCode, 0);
+  });
+
+  it('debería_ejecutar_build_después_de_confirmedForce', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('calculadora creada');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora',
+      runAgent,
+      safeMode: true,
+      confirmedForce: true,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.match(sent.cwd ?? '', /workspace$/);
+    assert.equal(sent.force, true, 'Confirmed build should use --force');
+    assert.equal(sent.trust, true);
+    assert.equal(result.reply, 'calculadora creada');
+    assert.equal(result.requiresForceConfirmation, undefined);
+  });
+
+  it('CLI_debería_usar_force_sin_confirmación', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('calculadora creada');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora',
+      runAgent,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.equal(sent.force, true, 'CLI mode should use force without confirmation');
+    assert.equal(result.reply, 'calculadora creada');
+    assert.equal(result.requiresForceConfirmation, undefined);
+  });
+
+  it('debería_usar_workspacePath_personalizado', async () => {
+    const repoRoot = await makeRepo();
+    const customWorkspace = path.join(repoRoot, 'workspace', 'telegram', '12345');
+    const { runAgent, calls } = fakeRunner('app creada');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'crea una app',
+      runAgent,
+      safeMode: true,
+      confirmedForce: true,
+      workspacePath: customWorkspace,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.equal(sent.cwd, customWorkspace, 'Should use custom workspace path as cwd');
+    assert.equal(sent.force, true);
+    assert.equal(sent.trust, true);
   });
 });

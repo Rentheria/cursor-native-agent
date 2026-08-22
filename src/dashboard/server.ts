@@ -9,6 +9,11 @@ import {
 } from '../core/agent-turn.js';
 import { withoutSegmentRecaps } from '../core/assistant-delta-stream.js';
 import { AGENT_NDJSON_RELATIVE_PATH } from '../core/debug.js';
+import {
+  setPendingDashboardForce,
+  consumePendingDashboardForce,
+  cancelPendingDashboardForce,
+} from '../core/pending-force.js';
 import { MEMORY_INDEX_FILE_NAME } from '../lib/constants.js';
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding } from '../lib/onboarding.js';
@@ -30,6 +35,7 @@ export const RATE_LIMIT_MAX_REQUESTS = 10;
 export type ChatTurnRunner = (options: {
   readonly repoRoot: string;
   readonly userPrompt: string;
+  readonly confirmedForce?: boolean;
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
 
@@ -326,18 +332,94 @@ async function handleChatPost(
     return;
   }
 
+  const context = extractChatContext(body);
+
+  // Check for confirmation commands
+  const lowerPrompt = prompt.toLowerCase().trim();
+  if (lowerPrompt === '/ok' || lowerPrompt === 'confirm' || lowerPrompt === '/confirm') {
+    const pendingPrompt = consumePendingDashboardForce();
+    if (pendingPrompt === undefined) {
+      sendJson(res, 400, {
+        error: 'no_pending_confirmation',
+        message: 'No pending build confirmation found (it may have expired). Please send your build request again.',
+      });
+      return;
+    }
+    // Re-run the original prompt with confirmedForce
+    const runChat = options.runChatTurn ?? defaultChatTurnRunner;
+    beginSse(res);
+
+    chatInFlight = true;
+    try {
+      const result = await runChat({
+        repoRoot: options.repoRoot,
+        userPrompt: pendingPrompt,
+        confirmedForce: true,
+        onAssistantDelta: withoutSegmentRecaps((text) => {
+          writeSseEvent(res, { type: 'delta', text });
+        }),
+      });
+      
+      if (result.exitCode !== 0 || result.reply.trim() === '') {
+        const stderrSnippet = result.stderr.trim().split('\n').slice(-3).join('\n');
+        const message = result.exitCode !== 0
+          ? `cursor-agent exited with code ${result.exitCode}${stderrSnippet ? `: ${stderrSnippet}` : ''}`
+          : 'cursor-agent returned an empty reply';
+        writeSseEvent(res, { type: 'error', message });
+        res.end();
+        return;
+      }
+      
+      const markdown = renderMarkdown(result.reply);
+      writeSseEvent(res, {
+        type: 'done',
+        reply: result.reply,
+        markdown,
+        exitCode: result.exitCode,
+      });
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      writeSseEvent(res, { type: 'error', message });
+      res.end();
+    } finally {
+      chatInFlight = false;
+    }
+    return;
+  }
+
+  // Check for cancellation commands
+  if (lowerPrompt === '/no' || lowerPrompt === 'cancel' || lowerPrompt === '/cancel') {
+    cancelPendingDashboardForce();
+    sendJson(res, 200, {
+      reply: 'Pending build confirmation cancelled. You can send a new request.',
+      markdown: '<p>Pending build confirmation cancelled. You can send a new request.</p>',
+    });
+    return;
+  }
+
   const runChat = options.runChatTurn ?? defaultChatTurnRunner;
   beginSse(res);
 
   chatInFlight = true;
   try {
+    // If context is provided, prepend it to the prompt
+    const effectivePrompt = context !== undefined
+      ? `Previous exchange:\nUser: ${context.userPrompt}\nAssistant: ${context.assistantReply}\n\nCurrent message:\n${prompt}`
+      : prompt;
+    
     const result = await runChat({
       repoRoot: options.repoRoot,
-      userPrompt: prompt,
+      userPrompt: effectivePrompt,
       onAssistantDelta: withoutSegmentRecaps((text) => {
         writeSseEvent(res, { type: 'delta', text });
       }),
     });
+    
+    // If the result requires force confirmation, store the pending prompt
+    if (result.requiresForceConfirmation === true) {
+      setPendingDashboardForce(context !== undefined ? effectivePrompt : prompt);
+    }
     
     if (result.exitCode !== 0 || result.reply.trim() === '') {
       const stderrSnippet = result.stderr.trim().split('\n').slice(-3).join('\n');
@@ -369,6 +451,7 @@ async function handleChatPost(
 async function defaultChatTurnRunner(options: {
   readonly repoRoot: string;
   readonly userPrompt: string;
+  readonly confirmedForce?: boolean;
   readonly onAssistantDelta?: (text: string) => void;
 }): Promise<AgentTurnResult> {
   return await runAgentTurn({
@@ -376,6 +459,7 @@ async function defaultChatTurnRunner(options: {
     userPrompt: options.userPrompt,
     stream: true,
     safeMode: true,
+    ...(options.confirmedForce !== undefined ? { confirmedForce: options.confirmedForce } : {}),
     ...(options.onAssistantDelta !== undefined
       ? { onAssistantDelta: options.onAssistantDelta }
       : {}),
@@ -399,6 +483,22 @@ function extractChatPrompt(body: unknown): string | undefined {
   }
   const trimmed = prompt.trim();
   return trimmed === '' ? undefined : trimmed;
+}
+
+function extractChatContext(body: unknown): { userPrompt: string; assistantReply: string } | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const context = (body as Record<string, unknown>)['context'];
+  if (typeof context !== 'object' || context === null) {
+    return undefined;
+  }
+  const userPrompt = (context as Record<string, unknown>)['userPrompt'];
+  const assistantReply = (context as Record<string, unknown>)['assistantReply'];
+  if (typeof userPrompt === 'string' && typeof assistantReply === 'string') {
+    return { userPrompt, assistantReply };
+  }
+  return undefined;
 }
 
 function extractMarkdownText(body: unknown): string | undefined {

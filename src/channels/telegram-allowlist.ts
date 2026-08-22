@@ -13,6 +13,8 @@ export interface TelegramAllowlist {
   readonly chatIds: ReadonlySet<number>;
   /** Optional extra narrowing: when non-empty, the sender must be listed too. */
   readonly userIds: ReadonlySet<number>;
+  /** Repo root path for per-chat workspace resolution. */
+  readonly repoRoot?: string | undefined;
 }
 
 /**
@@ -21,6 +23,7 @@ export interface TelegramAllowlist {
  */
 export function requireTelegramAllowlist(
   env: NodeJS.ProcessEnv = process.env,
+  repoRoot?: string,
 ): TelegramAllowlist {
   const chatIds = parseIdList(env[TELEGRAM_ALLOWED_CHAT_IDS_ENV], TELEGRAM_ALLOWED_CHAT_IDS_ENV);
   const userIds = parseIdList(env[TELEGRAM_ALLOWED_USER_IDS_ENV], TELEGRAM_ALLOWED_USER_IDS_ENV);
@@ -43,7 +46,7 @@ export function requireTelegramAllowlist(
     );
   }
 
-  return { chatIds, userIds };
+  return { chatIds, userIds, repoRoot };
 }
 
 export function isInboundAllowed(

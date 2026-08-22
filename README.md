@@ -482,12 +482,19 @@ npm run dashboard
 CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0 npm run dashboard
 ```
 
-**Seguridad:** el chat ejecuta prompts en **modo seguro** (repoRoot cwd, **sin**
-`--force`, **con** `--trust`). Además aplica verificación de origen (solo
-`127.0.0.1`/`localhost` o solicitudes sin Referer), cap de 256 KiB en el body
-(413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas
-este puerto a internet sin autenticación.** CLI y Telegram sí usan `--force --trust`;
-cron usa `--mode ask`.
+**Seguridad y trust boundary:** Dashboard y Telegram ejecutan prompts en **modo seguro** (repoRoot cwd, `--trust`, sin `--force` hasta confirmar):
+
+- **Confirmación de builds:** Solicitudes de build (apps, scripts) piden confirmación antes de escribir archivos.
+- **Primera solicitud de build:** El sistema responde pidiendo `/ok` o `/no` (dashboard) o confirmación (Telegram).
+- **Después de confirmar:** Se ejecuta el build con `--force`, escribiendo en el workspace configurado.
+- **Workspace aislado por canal:**
+  - Dashboard: escribe en `workspace/` (compartido, configurable vía `WORKSPACE_PATH`).
+  - Telegram: cada chat ID aislado en `workspace/telegram/<chatId>/` (evita colisiones entre usuarios).
+- **Reabrir conversaciones:** En el dashboard, hacer clic en un turno pasado lo carga en el chat con contexto (el siguiente mensaje incluye el prompt previo + respuesta para continuar el hilo).
+
+CLI (`npm run agent`) conserva `--force` directo (el usuario ya tipeó el prompt en su terminal). Cron usa `--mode ask` (nunca escribe).
+
+Además, el dashboard aplica verificación de origen (solo `127.0.0.1`/`localhost`), cap de 256 KiB en el body (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas este puerto a internet sin autenticación.**
 
 ## Arquitectura
 

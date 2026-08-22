@@ -10,6 +10,11 @@ import { withoutSegmentRecaps } from '../core/assistant-delta-stream.js';
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding } from '../lib/onboarding.js';
 import {
+  setPendingTelegramForce,
+  consumePendingTelegramForce,
+  cancelPendingTelegramForce,
+} from '../core/pending-force.js';
+import {
   createTelegramApi,
   requireTelegramBotToken,
   type TelegramApi,
@@ -33,6 +38,8 @@ export const DEFAULT_LONG_POLL_TIMEOUT_SECONDS = 25;
 export type ProcessInboundFn = (
   inbound: InboundTelegramText,
   onAssistantDelta: (text: string) => void,
+  confirmedForce?: boolean,
+  workspacePath?: string,
 ) => Promise<AgentTurnResult>;
 
 export interface TelegramBotOptions {
@@ -53,17 +60,32 @@ export interface TelegramBotOptions {
 
 /**
  * Detects Telegram slash commands that should not spawn agent turns.
- * Matches /start, /help, /stop with optional @BotName suffix.
+ * Matches /start, /help, /stop, /ok, /no with optional @BotName suffix.
  */
 function isSlashCommand(text: string): boolean {
-  return /^\/(start|help|stop)(@\w+)?$/i.test(text.trim());
+  return /^\/(start|help|stop|ok|no)(@\w+)?$/i.test(text.trim());
 }
 
 /**
  * Returns a canned reply for slash commands, asking the user to send a real prompt.
  */
-function getSlashCommandReply(): string {
+function getSlashCommandReply(command: string): string {
+  const lower = command.toLowerCase().trim();
+  if (lower.startsWith('/ok')) {
+    return 'No pending build confirmation found (it may have expired). Please send your build request again.';
+  }
+  if (lower.startsWith('/no')) {
+    return 'No pending confirmation to cancel. Send a build request to get started.';
+  }
   return 'Por favor, envía un prompt real, por ejemplo: "qué hace este repo" / Please send a real prompt, e.g. "what does this repo do"';
+}
+
+/**
+ * Resolves the workspace path for a Telegram chat.
+ * Returns workspace/telegram/<chatId>/ to isolate builds per chat.
+ */
+function resolveTelegramWorkspace(repoRoot: string, chatId: number): string {
+  return path.join(repoRoot, 'workspace', 'telegram', String(chatId));
 }
 
 /**
@@ -89,12 +111,89 @@ export async function dispatchInboundMessage(params: {
 
   if (isSlashCommand(inbound.text)) {
     const who = inbound.fromUsername ?? String(inbound.chatId);
+    const lower = inbound.text.toLowerCase().trim();
+    
+    // Handle /ok confirmation
+    if (lower.startsWith('/ok')) {
+      const pendingPrompt = consumePendingTelegramForce(inbound.chatId);
+      if (pendingPrompt === undefined) {
+        console.error(
+          `[telegram] /ok from ${who} chat=${String(inbound.chatId)} but no pending confirmation`,
+        );
+        await api.sendMessage({
+          chatId: inbound.chatId,
+          text: getSlashCommandReply('/ok'),
+        });
+        return;
+      }
+      
+      // Re-run the original prompt with confirmedForce
+      console.error(
+        `[telegram] Confirmed build from ${who} chat=${String(inbound.chatId)}: ${truncate(pendingPrompt, 80)}`,
+      );
+      
+      const liveReply = createTelegramLiveReply({ api, chatId: inbound.chatId });
+      const workspacePath = resolveTelegramWorkspace(params.allowlist.repoRoot ?? '', inbound.chatId);
+      console.error(`[telegram] Using per-chat workspace: ${workspacePath}`);
+      
+      let result: AgentTurnResult;
+      try {
+        result = await params.processInbound(
+          { ...inbound, text: pendingPrompt },
+          withoutSegmentRecaps((text) => {
+            liveReply.pushDelta(text);
+          }),
+          true,
+          workspacePath,
+        );
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[telegram] Agent turn failed: ${message}`);
+        await liveReply.finish(`Error running agent: ${message}`);
+        return;
+      }
+      
+      if (result.stderr.trim() !== '') {
+        console.error(result.stderr.trimEnd());
+      }
+      if (result.exitCode !== 0) {
+        console.error(
+          `[telegram] cursor-agent exited with code ${String(result.exitCode)}`,
+        );
+      }
+      
+      const reply =
+        result.reply.trim() !== ''
+          ? result.reply
+          : `(agent produced empty reply; exit=${String(result.exitCode)})`;
+      
+      await liveReply.finish(reply);
+      console.error(
+        `[telegram] Replied to chat=${String(inbound.chatId)} (${String(reply.length)} chars)`,
+      );
+      return;
+    }
+    
+    // Handle /no cancellation
+    if (lower.startsWith('/no')) {
+      cancelPendingTelegramForce(inbound.chatId);
+      console.error(
+        `[telegram] Cancelled pending build from ${who} chat=${String(inbound.chatId)}`,
+      );
+      await api.sendMessage({
+        chatId: inbound.chatId,
+        text: 'Build confirmation cancelled. You can send a new request.',
+      });
+      return;
+    }
+    
+    // Handle other slash commands
     console.error(
       `[telegram] Slash command from ${who} chat=${String(inbound.chatId)}: ${truncate(inbound.text, 80)}`,
     );
     await api.sendMessage({
       chatId: inbound.chatId,
-      text: getSlashCommandReply(),
+      text: getSlashCommandReply(inbound.text),
     });
     return;
   }
@@ -105,6 +204,7 @@ export async function dispatchInboundMessage(params: {
   );
 
   const liveReply = createTelegramLiveReply({ api, chatId: inbound.chatId });
+  const workspacePath = resolveTelegramWorkspace(params.allowlist.repoRoot ?? '', inbound.chatId);
 
   let result: AgentTurnResult;
   try {
@@ -113,12 +213,20 @@ export async function dispatchInboundMessage(params: {
       withoutSegmentRecaps((text) => {
         liveReply.pushDelta(text);
       }),
+      false,
+      workspacePath,
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[telegram] Agent turn failed: ${message}`);
     await liveReply.finish(`Error running agent: ${message}`);
     return;
+  }
+  
+  // If the result requires force confirmation, store the pending prompt
+  if (result.requiresForceConfirmation === true) {
+    setPendingTelegramForce(inbound.chatId, inbound.text);
+    console.error(`[telegram] Stored pending build confirmation for chat=${String(inbound.chatId)}`);
   }
 
   if (result.stderr.trim() !== '') {
@@ -149,22 +257,24 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
   const timeout =
     options.longPollTimeoutSeconds ?? DEFAULT_LONG_POLL_TIMEOUT_SECONDS;
   const loop = options.loop !== false;
-  // Default processInbound uses safeMode (repoRoot cwd, --trust, no --force),
+  // Default processInbound uses safeMode (repoRoot cwd, --trust, no --force without confirmation),
   // same as dashboard chat (/api/chat). Tests inject their own processInbound.
   const processInbound =
     options.processInbound ??
-    (async (inbound, onAssistantDelta) =>
+    (async (inbound, onAssistantDelta, confirmedForce, workspacePath) =>
       runAgentTurn({
         repoRoot: options.repoRoot,
         userPrompt: inbound.text,
         stream: true,
         safeMode: true,
+        ...(confirmedForce !== undefined ? { confirmedForce } : {}),
+        ...(workspacePath !== undefined ? { workspacePath } : {}),
         onAssistantDelta,
       }));
 
   let offset = options.initialOffset ?? 0;
   console.error(
-    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}, safeMode). Ctrl+C to stop.`,
+    `[telegram] Long polling started (timeout=${String(timeout)}s, allowlist: ${describeAllowlist(options.allowlist)}, safeMode, per-chat workspace). Ctrl+C to stop.`,
   );
 
   do {
@@ -212,7 +322,7 @@ async function main(): Promise<void> {
   loadRepoEnv(repoRoot);
   await maybeRunOnboarding({ repoRoot });
   const token = requireTelegramBotToken(process.env);
-  const allowlist = requireTelegramAllowlist(process.env);
+  const allowlist = requireTelegramAllowlist(process.env, repoRoot);
   const api = createTelegramApi({ token });
 
   const controller = new AbortController();

@@ -313,7 +313,8 @@ function renderChatShell(options: {
         </div>
       </header>
       <div class="info-banner" role="status">
-        <strong>Info:</strong> chat runs in safe mode (repoRoot cwd, sin <span class="mono">--force</span>, con <span class="mono">--trust</span>).
+        <strong>Info:</strong> chat runs in safe mode (repoRoot cwd, con <span class="mono">--trust</span>).
+        Build requests ask for confirmation before using <span class="mono">--force</span>.
         Bound to <span class="mono">127.0.0.1</span> only.
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
@@ -959,6 +960,8 @@ function chatClientScript(): string {
   var toggle = document.getElementById('sidebar-toggle');
   if (!form || !input || !log || !sendBtn) return;
 
+  var currentContext = null;
+
   document.querySelectorAll('.side-tab').forEach(function (tab) {
     tab.addEventListener('click', function () {
       var panel = tab.getAttribute('data-panel');
@@ -992,6 +995,7 @@ function chatClientScript(): string {
         if (turnPrompt) {
           hideEmpty();
           log.innerHTML = '';
+          currentContext = { userPrompt: turnPrompt, assistantReply: turnReply || '' };
           appendBubble('user', turnPrompt, false);
           if (turnReply) {
             fetch('/api/markdown', {
@@ -1069,10 +1073,15 @@ function chatClientScript(): string {
     sendBtn.disabled = true;
     input.disabled = true;
 
+    var body = { prompt: prompt };
+    if (currentContext) {
+      body.context = currentContext;
+    }
+
     fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-      body: JSON.stringify({ prompt: prompt })
+      body: JSON.stringify(body)
     }).then(function (res) {
       if (!res.ok) {
         return res.json().then(function (body) {
@@ -1107,6 +1116,7 @@ function chatClientScript(): string {
               } else if (payload.type === 'error' && typeof payload.message === 'string') {
                 assistantEl.className = 'chat-bubble error';
                 assistantEl.textContent = payload.message;
+                currentContext = null;
               } else if (payload.type === 'done' && typeof payload.reply === 'string') {
                 var finalText = payload.reply;
                 if (payload.markdown && typeof payload.markdown === 'string') {
@@ -1114,6 +1124,7 @@ function chatClientScript(): string {
                 } else {
                   assistantEl.textContent = finalText;
                 }
+                currentContext = { userPrompt: prompt, assistantReply: finalText };
               }
             }
           }
@@ -1127,6 +1138,7 @@ function chatClientScript(): string {
       assistantEl.classList.remove('streaming');
       assistantEl.className = 'chat-bubble error';
       assistantEl.textContent = err && err.message ? err.message : String(err);
+      currentContext = null;
     }).then(function () {
       assistantEl.classList.remove('streaming');
       sendBtn.disabled = false;
