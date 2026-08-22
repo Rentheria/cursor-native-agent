@@ -328,7 +328,7 @@ function renderChatShell(options: {
         </div>
       </header>
       <div class="info-banner" role="status">
-        Modo seguro: pide confirmación antes de escribir cambios. Solo <span class="mono">127.0.0.1</span>.
+        Confirmar escribe archivos bajo workspace/ · modo seguro + trust · token requerido · solo <span class="mono">127.0.0.1</span>
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
         <div class="chat-empty" id="chat-empty">

@@ -85,7 +85,7 @@ function getSlashCommandReply(command: string): string {
     return 'No pending confirmation to cancel. Send a build request to get started.';
   }
   if (lower.startsWith('/start')) {
-    return 'Conversación iniciada. Envía tu prompt / Conversation started. Send your prompt.';
+    return 'Conversación iniciada. Los builds piden Confirmar antes de escribir. Este chat está en allowlist. / Conversation started. Builds ask for confirmation before writing. This chat is allowlisted.';
   }
   return 'Por favor, envía un prompt real, por ejemplo: "qué hace este repo" / Please send a real prompt, e.g. "what does this repo do"';
 }

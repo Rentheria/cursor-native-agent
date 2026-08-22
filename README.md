@@ -26,6 +26,10 @@ Requisitos: Node ≥ 20 y `cursor-agent` instalado ([ver abajo](#instalación-r�
 
 Para el walkthrough completo: [TUTORIAL.md](./TUTORIAL.md).
 
+**Para uso personal (download-and-run):** Cada quien lo corre en su máquina.
+Dashboard solo en `127.0.0.1`; token en `.env`; confirm before writes. Nunca
+commitees `.env`. Ver sección "Para uso personal / seguridad" abajo.
+
 **Cursor no distribuye este producto.** Es un wrapper de ejemplo alrededor del
 CLI que vive fuera del IDE. En el IDE trabajas en un repo; esto es el agente
 como su propia cosa, autenticado como tú, con markdown skills + memoria lazy +
@@ -35,6 +39,30 @@ opcional Telegram/cron/dashboard.
 
 Este repo nació como demo pública para el Cursor Meetup GDL del 27-ago-2026,
 pero funciona como agente general clonado en cualquier repo.
+
+## Para uso personal / seguridad
+
+Este es un **agente personal download-and-run**: cada persona lo corre en su
+propia máquina (tu cuenta Cursor, tu billing). No es SaaS multi-tenant.
+
+**Modelo de seguridad:**
+
+- **Dashboard** solo escucha en `127.0.0.1` (localhost). El chat requiere
+  `DASHBOARD_TOKEN` de `.env` (generado automáticamente en `npm run setup`).
+  Usa el header `X-Dashboard-Token` o `Authorization: Bearer`.
+- **Agente** corre con `--trust` sobre el workspace. Dashboard y Telegram piden
+  **Confirmar** antes de escribir archivos (`--force` bajo workspace/).
+- **Nunca commitees `.env`** (contiene token, Telegram secrets). `threads/` y
+  `workspace/` ya están en `.gitignore`.
+- **Telegram** opcional; falla cerrado sin `TELEGRAM_ALLOWED_CHAT_IDS` (allowlist
+  obligatoria).
+
+No expongas el puerto del dashboard a internet sin autenticación adicional.
+Barra de seguridad: suficientemente seguro para que extraños dejen
+dashboard/Telegram/cron encendidos diariamente.
+
+El meetup es contexto histórico (footnote); el framing es agente personal
+localhost.
 
 ## Cursor Plugin (local)
 
