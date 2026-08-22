@@ -10,6 +10,10 @@ import { withoutSegmentRecaps } from '../core/assistant-delta-stream.js';
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding } from '../lib/onboarding.js';
 import {
+  WORKSPACE_PATH_ENV,
+  WORKSPACE_DIRECTORY_NAME,
+} from '../lib/constants.js';
+import {
   setPendingTelegramForce,
   consumePendingTelegramForce,
   cancelPendingTelegramForce,
@@ -82,10 +86,16 @@ function getSlashCommandReply(command: string): string {
 
 /**
  * Resolves the workspace path for a Telegram chat.
- * Returns workspace/telegram/<chatId>/ to isolate builds per chat.
+ * Honors WORKSPACE_PATH env the same way resolveWorkspacePath does,
+ * then appends telegram/<chatId>/ for per-chat isolation.
  */
-function resolveTelegramWorkspace(repoRoot: string, chatId: number): string {
-  return path.join(repoRoot, 'workspace', 'telegram', String(chatId));
+function resolveTelegramWorkspace(repoRoot: string, chatId: number, env: NodeJS.ProcessEnv = process.env): string {
+  const envPath = env[WORKSPACE_PATH_ENV];
+  const baseWorkspace = envPath !== undefined && envPath.trim() !== ''
+    ? (path.isAbsolute(envPath) ? envPath : path.resolve(repoRoot, envPath))
+    : path.join(repoRoot, WORKSPACE_DIRECTORY_NAME);
+  
+  return path.join(baseWorkspace, 'telegram', String(chatId));
 }
 
 /**

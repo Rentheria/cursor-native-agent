@@ -866,4 +866,52 @@ describe('runAgentTurn (confirmación de --force en safeMode)', () => {
     assert.equal(sent.force, true);
     assert.equal(sent.trust, true);
   });
+
+  it('contexto_con_build_previo_NO_debe_re-disparar_build_intent', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('de nada');
+
+    // Simulate reopening a past turn where the original was "haz una calculadora"
+    // and the new message is just "gracias" (not a build request)
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'gracias',
+      context: {
+        userPrompt: 'haz una calculadora',
+        assistantReply: 'Calculadora creada.',
+      },
+      runAgent,
+      safeMode: true,
+    });
+
+    // The context contains "haz una calculadora" and "calculadora", which normally
+    // would trigger build intent if it was part of userPrompt. But since it's in context,
+    // build intent should only check the current message "gracias", which is NOT a build.
+    // The agent should be called normally without asking for confirmation.
+    assert.equal(calls.length, 1, 'Should call agent without asking for confirmation');
+    assert.equal(result.requiresForceConfirmation, undefined);
+    assert.equal(result.reply, 'de nada');
+  });
+
+  it('nuevo_build_tras_contexto_SÍ_debe_pedir_confirmación', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('no debería llamarse');
+
+    // Context from a previous non-build turn, but current message IS a build request
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora',
+      context: {
+        userPrompt: 'qué hace este repo',
+        assistantReply: 'Es un wrapper...',
+      },
+      runAgent,
+      safeMode: true,
+    });
+
+    // The current message "haz una calculadora" IS a build request, so it should ask for confirmation
+    assert.equal(calls.length, 0, 'Should NOT call agent before confirmation');
+    assert.equal(result.requiresForceConfirmation, true);
+    assert.match(result.reply, /looks like a build request/i);
+  });
 });

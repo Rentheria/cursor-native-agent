@@ -36,6 +36,7 @@ export type ChatTurnRunner = (options: {
   readonly repoRoot: string;
   readonly userPrompt: string;
   readonly confirmedForce?: boolean;
+  readonly context?: { userPrompt: string; assistantReply: string };
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
 
@@ -339,10 +340,12 @@ async function handleChatPost(
   if (lowerPrompt === '/ok' || lowerPrompt === 'confirm' || lowerPrompt === '/confirm') {
     const pendingPrompt = consumePendingDashboardForce();
     if (pendingPrompt === undefined) {
-      sendJson(res, 400, {
-        error: 'no_pending_confirmation',
+      beginSse(res);
+      writeSseEvent(res, {
+        type: 'error',
         message: 'No pending build confirmation found (it may have expired). Please send your build request again.',
       });
+      res.end();
       return;
     }
     // Re-run the original prompt with confirmedForce
@@ -391,10 +394,16 @@ async function handleChatPost(
   // Check for cancellation commands
   if (lowerPrompt === '/no' || lowerPrompt === 'cancel' || lowerPrompt === '/cancel') {
     cancelPendingDashboardForce();
-    sendJson(res, 200, {
-      reply: 'Pending build confirmation cancelled. You can send a new request.',
-      markdown: '<p>Pending build confirmation cancelled. You can send a new request.</p>',
+    beginSse(res);
+    const cancelMessage = 'Pending build confirmation cancelled. You can send a new request.';
+    const markdown = renderMarkdown(cancelMessage);
+    writeSseEvent(res, {
+      type: 'done',
+      reply: cancelMessage,
+      markdown,
+      exitCode: 0,
     });
+    res.end();
     return;
   }
 
@@ -403,22 +412,19 @@ async function handleChatPost(
 
   chatInFlight = true;
   try {
-    // If context is provided, prepend it to the prompt
-    const effectivePrompt = context !== undefined
-      ? `Previous exchange:\nUser: ${context.userPrompt}\nAssistant: ${context.assistantReply}\n\nCurrent message:\n${prompt}`
-      : prompt;
-    
+    // Check build intent on the CURRENT message only, not with prepended context
     const result = await runChat({
       repoRoot: options.repoRoot,
-      userPrompt: effectivePrompt,
+      userPrompt: prompt,
+      ...(context !== undefined ? { context } : {}),
       onAssistantDelta: withoutSegmentRecaps((text) => {
         writeSseEvent(res, { type: 'delta', text });
       }),
     });
     
-    // If the result requires force confirmation, store the pending prompt
+    // If the result requires force confirmation, store the CURRENT prompt only (not with context)
     if (result.requiresForceConfirmation === true) {
-      setPendingDashboardForce(context !== undefined ? effectivePrompt : prompt);
+      setPendingDashboardForce(prompt);
     }
     
     if (result.exitCode !== 0 || result.reply.trim() === '') {
@@ -452,14 +458,17 @@ async function defaultChatTurnRunner(options: {
   readonly repoRoot: string;
   readonly userPrompt: string;
   readonly confirmedForce?: boolean;
+  readonly context?: { userPrompt: string; assistantReply: string };
   readonly onAssistantDelta?: (text: string) => void;
 }): Promise<AgentTurnResult> {
+  // Pass context to agent-turn; it will prepend AFTER build-intent check
   return await runAgentTurn({
     repoRoot: options.repoRoot,
     userPrompt: options.userPrompt,
     stream: true,
     safeMode: true,
     ...(options.confirmedForce !== undefined ? { confirmedForce: options.confirmedForce } : {}),
+    ...(options.context !== undefined ? { context: options.context } : {}),
     ...(options.onAssistantDelta !== undefined
       ? { onAssistantDelta: options.onAssistantDelta }
       : {}),

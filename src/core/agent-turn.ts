@@ -84,6 +84,11 @@ export interface AgentTurnOptions {
    * When set, this path is used instead of the default resolveWorkspacePath.
    */
   readonly workspacePath?: string;
+  /**
+   * Optional context from a previous turn (for dashboard conversation continuation).
+   * Prepended to the prompt sent to cursor-agent AFTER build-intent checks.
+   */
+  readonly context?: { userPrompt: string; assistantReply: string };
 }
 
 /**
@@ -245,12 +250,6 @@ export async function runAgentTurn(
       return delegated;
     }
 
-    const assembled = assemblePrompt({
-      userPrompt,
-      matchedSkills,
-      memory,
-    });
-
     const workspacePath = options.workspacePath ?? resolveWorkspacePath(repoRoot);
     // hasClarifyBuildSkill already computed above during skill injection check
     const isBuildRequest = hasClarifyBuildSkill || hasBuildIntent;
@@ -287,6 +286,17 @@ The confirmation expires in 10 minutes.`;
       
       return confirmResult;
     }
+    
+    // Prepend context AFTER build-intent check (context is for the model, not for intent detection)
+    const effectivePrompt = options.context !== undefined
+      ? `Previous exchange:\nUser: ${options.context.userPrompt}\nAssistant: ${options.context.assistantReply}\n\nCurrent message:\n${userPrompt}`
+      : userPrompt;
+    
+    const assembled = assemblePrompt({
+      userPrompt: effectivePrompt,
+      matchedSkills,
+      memory,
+    });
     
     // Build requests get workspace cwd and --force (either CLI or confirmed safeMode).
     // Non-build prompts in safeMode stay at repoRoot cwd with no --force.
