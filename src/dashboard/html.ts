@@ -295,11 +295,16 @@ function renderChatShell(options: {
       </div>
       <nav class="sidebar-nav" aria-label="Panels">
         <button type="button" class="side-tab is-active" data-panel="agent">Turns</button>
+        <button type="button" class="side-tab" data-panel="threads">Threads</button>
         <button type="button" class="side-tab" data-panel="cron">Cron</button>
         <button type="button" class="side-tab" data-panel="memory">Memory</button>
       </nav>
       <div class="sidebar-panels">
         <div class="side-panel is-active" data-panel="agent">${options.agentSection}</div>
+        <div class="side-panel" data-panel="threads">
+          <button type="button" class="button" id="new-thread-btn">New Thread</button>
+          <div id="threads-list-panel"></div>
+        </div>
         <div class="side-panel" data-panel="cron">${options.cronSection}</div>
         <div class="side-panel" data-panel="memory">${options.memorySection}</div>
       </div>
@@ -961,6 +966,7 @@ function chatClientScript(): string {
   if (!form || !input || !log || !sendBtn) return;
 
   var currentContext = null;
+  var currentThreadId = localStorage.getItem('currentThreadId') || null;
 
   document.querySelectorAll('.side-tab').forEach(function (tab) {
     tab.addEventListener('click', function () {
@@ -1074,7 +1080,9 @@ function chatClientScript(): string {
     input.disabled = true;
 
     var body = { prompt: prompt };
-    if (currentContext) {
+    if (currentThreadId) {
+      body.threadId = currentThreadId;
+    } else if (currentContext) {
       body.context = currentContext;
     }
 
@@ -1124,7 +1132,13 @@ function chatClientScript(): string {
                 } else {
                   assistantEl.textContent = finalText;
                 }
-                currentContext = { userPrompt: prompt, assistantReply: finalText };
+                if (payload.threadId) {
+                  currentThreadId = payload.threadId;
+                  localStorage.setItem('currentThreadId', currentThreadId);
+                  loadThreads();
+                } else {
+                  currentContext = { userPrompt: prompt, assistantReply: finalText };
+                }
               }
             }
           }
@@ -1146,6 +1160,94 @@ function chatClientScript(): string {
       input.focus();
     });
   });
+
+  function loadThreads() {
+    fetch('/api/threads')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var panel = document.getElementById('threads-list-panel');
+        if (!panel) return;
+        if (!data.threads || data.threads.length === 0) {
+          panel.innerHTML = '<p style="padding:8px;color:var(--muted);font-size:0.9em;">No threads yet</p>';
+          return;
+        }
+        var html = '<div class="thread-list">';
+        data.threads.forEach(function (t) {
+          var active = currentThreadId === t.id ? ' is-active' : '';
+          var title = t.title || 'Untitled';
+          if (title.length > 50) title = title.slice(0, 47) + '...';
+          html += '<button class="thread-item' + active + '" data-thread-id="' + t.id + '">' +
+                  '<div class="thread-title">' + title + '</div>' +
+                  '<div class="thread-meta">' + new Date(t.updatedAt).toLocaleString() + '</div>' +
+                  '</button>';
+        });
+        html += '</div>';
+        panel.innerHTML = html;
+        
+        panel.querySelectorAll('.thread-item').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var threadId = btn.getAttribute('data-thread-id');
+            loadThread(threadId);
+          });
+        });
+      })
+      .catch(function (err) {
+        console.error('Failed to load threads:', err);
+      });
+  }
+
+  function loadThread(threadId) {
+    fetch('/api/threads/' + threadId)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.thread) return;
+        currentThreadId = threadId;
+        localStorage.setItem('currentThreadId', threadId);
+        currentContext = null;
+        log.innerHTML = '';
+        hideEmpty();
+        
+        data.thread.messages.forEach(function (msg) {
+          if (msg.role === 'assistant') {
+            fetch('/api/markdown', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: msg.content })
+            }).then(function (res) { return res.json(); })
+              .then(function (mdData) {
+                appendBubble('assistant', mdData.markdown || msg.content, true);
+              })
+              .catch(function () {
+                appendBubble('assistant', msg.content, false);
+              });
+          } else {
+            appendBubble('user', msg.content, false);
+          }
+        });
+        
+        loadThreads();
+      })
+      .catch(function (err) {
+        console.error('Failed to load thread:', err);
+      });
+  }
+
+  var newThreadBtn = document.getElementById('new-thread-btn');
+  if (newThreadBtn) {
+    newThreadBtn.addEventListener('click', function () {
+      currentThreadId = null;
+      currentContext = null;
+      localStorage.removeItem('currentThreadId');
+      log.innerHTML = '';
+      if (empty && !empty.parentNode) {
+        log.appendChild(empty);
+      }
+      loadThreads();
+      input.focus();
+    });
+  }
+
+  loadThreads();
 })();`;
 }
 

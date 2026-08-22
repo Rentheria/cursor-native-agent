@@ -482,7 +482,7 @@ describe('dispatchInboundMessage / runTelegramBot', () => {
 
     assert.equal(processInboundCalls, 0);
     assert.equal(sent.length, 1);
-    assert.match(sent[0] ?? '', /prompt real/);
+    assert.match(sent[0] ?? '', /Conversación iniciada/);
   });
 
   it('no_debería_ejecutar_agente_para_slash_command_help_con_at_botname', async () => {

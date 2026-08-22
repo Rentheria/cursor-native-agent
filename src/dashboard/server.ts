@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import {
   runAgentTurn,
   type AgentTurnResult,
-  type AgentTurnOptions,
 } from '../core/agent-turn.js';
 import { withoutSegmentRecaps } from '../core/assistant-delta-stream.js';
 import { AGENT_NDJSON_RELATIVE_PATH } from '../core/debug.js';
@@ -388,6 +387,7 @@ async function handleChatPost(
   }
 
   const context = extractChatContext(body);
+  const threadId = extractThreadId(body);
 
   // Check for confirmation commands
   const lowerPrompt = prompt.toLowerCase().trim();
@@ -412,6 +412,7 @@ async function handleChatPost(
         repoRoot: options.repoRoot,
         userPrompt: pendingPrompt,
         confirmedForce: true,
+        ...(threadId !== undefined ? { threadId } : {}),
         onAssistantDelta: withoutSegmentRecaps((text) => {
           writeSseEvent(res, { type: 'delta', text });
         }),
@@ -433,6 +434,7 @@ async function handleChatPost(
         reply: result.reply,
         markdown,
         exitCode: result.exitCode,
+        ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
       });
       res.end();
     } catch (error: unknown) {
@@ -471,6 +473,7 @@ async function handleChatPost(
       repoRoot: options.repoRoot,
       userPrompt: prompt,
       ...(context !== undefined ? { context } : {}),
+      ...(threadId !== undefined ? { threadId } : {}),
       onAssistantDelta: withoutSegmentRecaps((text) => {
         writeSseEvent(res, { type: 'delta', text });
       }),
@@ -497,6 +500,7 @@ async function handleChatPost(
       reply: result.reply,
       markdown,
       exitCode: result.exitCode,
+      ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
     });
     res.end();
   } catch (error: unknown) {
@@ -513,9 +517,10 @@ async function defaultChatTurnRunner(options: {
   readonly userPrompt: string;
   readonly confirmedForce?: boolean;
   readonly context?: { userPrompt: string; assistantReply: string };
+  readonly threadId?: string;
   readonly onAssistantDelta?: (text: string) => void;
 }): Promise<AgentTurnResult> {
-  // Pass context to agent-turn; it will prepend AFTER build-intent check
+  // Pass context/threadId to agent-turn; it will prepend AFTER build-intent check
   return await runAgentTurn({
     repoRoot: options.repoRoot,
     userPrompt: options.userPrompt,
@@ -523,6 +528,7 @@ async function defaultChatTurnRunner(options: {
     safeMode: true,
     ...(options.confirmedForce !== undefined ? { confirmedForce: options.confirmedForce } : {}),
     ...(options.context !== undefined ? { context: options.context } : {}),
+    ...(options.threadId !== undefined ? { threadId: options.threadId } : {}),
     ...(options.onAssistantDelta !== undefined
       ? { onAssistantDelta: options.onAssistantDelta }
       : {}),
@@ -560,6 +566,17 @@ function extractChatContext(body: unknown): { userPrompt: string; assistantReply
   const assistantReply = (context as Record<string, unknown>)['assistantReply'];
   if (typeof userPrompt === 'string' && typeof assistantReply === 'string') {
     return { userPrompt, assistantReply };
+  }
+  return undefined;
+}
+
+function extractThreadId(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const threadId = (body as Record<string, unknown>)['threadId'];
+  if (typeof threadId === 'string' && threadId.trim() !== '') {
+    return threadId;
   }
   return undefined;
 }
