@@ -47,7 +47,9 @@ plantilla.
 
 `npm run telegram` recibe mensajes de un bot vía **long polling**
 (`getUpdates` + timeout) — no hace falta un servidor público ni webhooks.
-Usa `fetch` nativo de Node (≥20); sin dependencias nuevas.
+Usa `fetch` nativo de Node (≥20); sin dependencias nuevas. **Cada chat mantiene
+su propio thread persistente** (un thread por `chatId`), guardado en
+`threads/telegram-chat-<id>.json` (gitignored).
 
 Flujo:
 
@@ -59,7 +61,7 @@ Telegram (usuario) → getUpdates (long poll)
         │
         ▼
  runAgentTurn  (mismo pipeline que npm run agent:
-                skills + memoria + cursor-agent -p)
+                skills + memoria + thread context + cursor-agent -p)
         │
         ▼
  sendMessage (respuesta al chat; trocea si > 4096 chars)
@@ -85,13 +87,15 @@ Telegram (usuario) → getUpdates (long poll)
 ## Dashboard web (observabilidad local)
 
 `npm run dashboard` levanta un servidor HTTP nativo (`node:http`, sin
-frameworks) en `127.0.0.1` con puerto `PORT` (default `3847`). Sirve una página
-HTML que muestra:
+frameworks) en `127.0.0.1` con puerto `PORT` (default `3847`). Las conversaciones
+persisten en threads (guardados en `threads/`, gitignored) y sobreviven a
+refrescar la página. Sirve una página HTML que muestra:
 
-1. Últimas entradas de `logs/agent.ndjson` (turnos: prompt, skills matched,
+1. **Threads de conversación** (lista, crear nuevo, continuar existentes).
+2. Últimas entradas de `logs/agent.ndjson` (turnos: prompt, skills matched,
    memoria, `cursorAgentMs`, `totalMs`).
-2. Hallazgos `=== CRON FINDING … ===` de `logs/cron.log` (branch, tree, verdict, note).
-3. Índice parseado de `MEMORY.md`.
+3. Hallazgos `=== CRON FINDING … ===` de `logs/cron.log` (branch, tree, verdict, note).
+4. Índice parseado de `MEMORY.md`.
 
 Por defecto **incluye chat interactivo** (habilitado): JSON auxiliar en `/api/agent`,
 `/api/cron`, `/api/memory`, `/api/health`. Código en `src/dashboard/` (parsers +
@@ -105,6 +109,12 @@ Por defecto habilitado en localhost. Con `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0`
 El handler reutiliza `runAgentTurn` (mismo pipeline que `npm run agent` /
 Telegram) con streaming opt-in vía
 `--output-format stream-json --stream-partial-output`.
+
+**Threads persistentes:** Cada conversación se guarda automáticamente en
+`threads/<id>.json` (gitignored). El dashboard lista threads recientes en el
+sidebar, puedes crear nuevas conversaciones, y continuar threads existentes.
+Refrescar la página reabre el último thread. Telegram mantiene un thread por
+`chatId`. El CLI sigue siendo one-shot (sin threads) a menos que uses `--resume <id>`.
 
 **Nota de seguridad:** esta ruta ejecuta prompts en **modo seguro** (repoRoot
 cwd, **sin** `--force`, **con** `--trust`). Además aplica verificación de origen (solo

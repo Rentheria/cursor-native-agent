@@ -9,6 +9,8 @@ briefs/
 # User projects built by the agent
 workspace/
 !workspace/README.md
+# Conversation threads (private, not committed)
+threads/
 .env
 .env.*
 !.env.example

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   runAgentTurn,
   type AgentTurnResult,
+  type AgentTurnOptions,
 } from '../core/agent-turn.js';
 import { withoutSegmentRecaps } from '../core/assistant-delta-stream.js';
 import { AGENT_NDJSON_RELATIVE_PATH } from '../core/debug.js';
@@ -17,6 +18,10 @@ import {
 import { MEMORY_INDEX_FILE_NAME } from '../lib/constants.js';
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding } from '../lib/onboarding.js';
+import {
+  loadThread,
+  listThreads,
+} from '../lib/threads-store.js';
 import { renderDashboardHtml, type DashboardSnapshot } from './html.js';
 import { renderMarkdown } from './markdown.js';
 import {
@@ -37,6 +42,7 @@ export type ChatTurnRunner = (options: {
   readonly userPrompt: string;
   readonly confirmedForce?: boolean;
   readonly context?: { userPrompt: string; assistantReply: string };
+  readonly threadId?: string;
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
 
@@ -166,6 +172,54 @@ export async function handleRequest(
       return;
     }
     await handleChatPost(req, res, options, rateLimitMap, server);
+    return;
+  }
+
+  if (pathname === '/api/threads') {
+    if (!chatEnabled) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        message: 'Threads are only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (method === 'GET' || method === 'HEAD') {
+      const summaries = await listThreads(options.repoRoot);
+      sendJson(res, 200, { threads: summaries }, method === 'HEAD', chatEnabled);
+      return;
+    }
+    sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: 'Use GET /api/threads to list threads.',
+    }, false, chatEnabled);
+    return;
+  }
+
+  if (pathname.startsWith('/api/threads/')) {
+    if (!chatEnabled) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        message: 'Threads are only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    const threadId = pathname.slice('/api/threads/'.length);
+    if (method === 'GET' || method === 'HEAD') {
+      const thread = await loadThread(options.repoRoot, threadId);
+      if (thread === undefined) {
+        sendJson(res, 404, {
+          error: 'not_found',
+          message: `Thread ${threadId} not found.`,
+        }, false, chatEnabled);
+        return;
+      }
+      sendJson(res, 200, { thread }, method === 'HEAD', chatEnabled);
+      return;
+    }
+    sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: `Use GET /api/threads/${threadId} to load a thread.`,
+    }, false, chatEnabled);
     return;
   }
 
