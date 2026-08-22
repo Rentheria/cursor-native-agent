@@ -287,6 +287,16 @@ function renderChatShell(options: {
   readonly memorySection: string;
 }): string {
   return `<body class="mode-chat">
+  <div class="unlock-modal" id="unlock-modal">
+    <div class="unlock-card">
+      <h2>Autenticación requerida</h2>
+      <p>El dashboard necesita el token de autenticación para enviar mensajes al agente.</p>
+      <p>El token está en <code>.env</code> como <code>DASHBOARD_TOKEN</code> (después de <code>npm run setup</code>).</p>
+      <input type="password" id="unlock-input" placeholder="Ingresá el token" autocomplete="off" />
+      <button type="button" id="unlock-btn">Desbloquear</button>
+      <p class="unlock-hint">El token se guarda en sessionStorage y nunca sale del navegador.</p>
+    </div>
+  </div>
   <div class="app">
     <aside class="sidebar" id="sidebar" aria-label="Observatory">
       <div class="sidebar-brand">
@@ -295,14 +305,14 @@ function renderChatShell(options: {
       </div>
       <nav class="sidebar-nav" aria-label="Panels">
         <button type="button" class="side-tab is-active" data-panel="agent">Turns</button>
-        <button type="button" class="side-tab" data-panel="threads">Threads</button>
+        <button type="button" class="side-tab" data-panel="threads">Hilos</button>
         <button type="button" class="side-tab" data-panel="cron">Cron</button>
-        <button type="button" class="side-tab" data-panel="memory">Memory</button>
+        <button type="button" class="side-tab" data-panel="memory">Memoria</button>
       </nav>
       <div class="sidebar-panels">
         <div class="side-panel is-active" data-panel="agent">${options.agentSection}</div>
         <div class="side-panel" data-panel="threads">
-          <button type="button" class="button" id="new-thread-btn">New Thread</button>
+          <button type="button" class="button" id="new-thread-btn">Nueva conversación</button>
           <div id="threads-list-panel"></div>
         </div>
         <div class="side-panel" data-panel="cron">${options.cronSection}</div>
@@ -311,26 +321,27 @@ function renderChatShell(options: {
     </aside>
     <div class="chat-column">
       <header class="chat-top">
-        <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true">Panels</button>
+        <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true">Paneles</button>
         <div>
           <h1>Chat</h1>
-          <p class="chat-sub">POST /api/chat · SSE · same pipeline as <span class="mono">npm run agent</span></p>
+          <p class="chat-sub">POST /api/chat · SSE · mismo pipeline que <span class="mono">npm run agent</span></p>
         </div>
       </header>
       <div class="info-banner" role="status">
-        <strong>Info:</strong> chat runs in safe mode (repoRoot cwd, con <span class="mono">--trust</span>).
-        Build requests ask for confirmation before using <span class="mono">--force</span>.
-        Bound to <span class="mono">127.0.0.1</span> only.
+        Modo seguro: pide confirmación antes de escribir cambios. Solo <span class="mono">127.0.0.1</span>.
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
-        <div class="chat-empty" id="chat-empty">Ask the agent anything. Replies stream in as deltas arrive.</div>
+        <div class="chat-empty" id="chat-empty">
+          <p>Preguntale al agente lo que quieras.</p>
+          <p class="chat-empty-hint">Por ejemplo: "qué hace este repo"</p>
+        </div>
       </div>
       <form class="composer" id="chat-form">
         <div class="composer-shell">
-          <textarea id="chat-input" name="prompt" rows="1" autocomplete="off" placeholder="Message the agent…" required></textarea>
-          <button type="submit" id="chat-send" aria-label="Send">Send</button>
+          <textarea id="chat-input" name="prompt" rows="1" autocomplete="off" placeholder="Mensaje al agente…" required></textarea>
+          <button type="submit" id="chat-send" aria-label="Enviar">Enviar</button>
         </div>
-        <p class="composer-hint">Enter to send · Shift+Enter for newline</p>
+        <p class="composer-hint">Enter para enviar · Shift+Enter para nueva línea</p>
       </form>
     </div>
   </div>
@@ -630,6 +641,100 @@ function observeStyles(): string {
 
 function chatStyles(): string {
   return `
+    .unlock-modal {
+      position: fixed;
+      inset: 0;
+      background: color-mix(in srgb, var(--ink) 25%, transparent);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .unlock-modal.is-visible {
+      display: flex;
+    }
+    .unlock-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      max-width: 28rem;
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 15%, transparent);
+    }
+    .unlock-card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .unlock-card p {
+      margin: 0 0 0.65rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: var(--ink);
+    }
+    .unlock-card code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      background: var(--panel);
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.3rem;
+    }
+    .unlock-card input {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      font: inherit;
+      font-size: 0.95rem;
+      border: 1px solid var(--line);
+      border-radius: 0.65rem;
+      background: var(--surface);
+      margin: 0.75rem 0 0.65rem;
+    }
+    .unlock-card button {
+      width: 100%;
+      padding: 0.65rem;
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border: none;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+    }
+    .unlock-hint {
+      margin-top: 0.65rem !important;
+      font-size: 0.8rem !important;
+      color: var(--muted) !important;
+    }
+    .confirm-actions {
+      display: flex;
+      gap: 0.55rem;
+      margin-top: 0.65rem;
+    }
+    .confirm-btn {
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .confirm-btn.ok {
+      background: var(--accent);
+      color: #fff;
+    }
+    .confirm-btn.no {
+      background: var(--line);
+      color: var(--ink);
+    }
+    .confirm-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     body.mode-chat {
       overflow: hidden;
       background:
@@ -1237,6 +1342,92 @@ function chatClientScript(): string {
                 } else {
                   assistantEl.textContent = finalText;
                 }
+                
+                if (payload.requiresForceConfirmation === true) {
+                  var actions = document.createElement('div');
+                  actions.className = 'confirm-actions';
+                  
+                  var okBtn = document.createElement('button');
+                  okBtn.className = 'confirm-btn ok';
+                  okBtn.textContent = 'Confirmar';
+                  
+                  var noBtn = document.createElement('button');
+                  noBtn.className = 'confirm-btn no';
+                  noBtn.textContent = 'Cancelar';
+                  
+                  function handleConfirm(action) {
+                    okBtn.disabled = true;
+                    noBtn.disabled = true;
+                    
+                    var newAssistantEl = appendBubble('assistant', '');
+                    newAssistantEl.classList.add('streaming');
+                    sendBtn.disabled = true;
+                    input.disabled = true;
+                    
+                    fetchWithToken('/api/confirm', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+                      body: JSON.stringify({ action: action })
+                    }).then(function (res) {
+                      if (!res.ok) throw new Error('HTTP ' + res.status);
+                      if (!res.body) throw new Error('No response body');
+                      var reader = res.body.getReader();
+                      var decoder = new TextDecoder();
+                      var buffer = '';
+                      function pumpConfirm() {
+                        return reader.read().then(function (result) {
+                          if (result.done) return;
+                          buffer += decoder.decode(result.value, { stream: true });
+                          var parts = buffer.split('\\n\\n');
+                          buffer = parts.pop() || '';
+                          for (var i = 0; i < parts.length; i++) {
+                            var block = parts[i];
+                            var lines = block.split('\\n');
+                            for (var j = 0; j < lines.length; j++) {
+                              var line = lines[j];
+                              if (line.indexOf('data: ') !== 0) continue;
+                              var payload;
+                              try { payload = JSON.parse(line.slice(6)); } catch (e) { continue; }
+                              if (payload.type === 'delta' && typeof payload.text === 'string') {
+                                newAssistantEl.setAttribute('data-raw', (newAssistantEl.getAttribute('data-raw') || '') + payload.text);
+                                newAssistantEl.textContent = newAssistantEl.getAttribute('data-raw') || '';
+                                log.scrollTop = log.scrollHeight;
+                              } else if (payload.type === 'error' && typeof payload.message === 'string') {
+                                newAssistantEl.className = 'chat-bubble error';
+                                newAssistantEl.textContent = payload.message;
+                              } else if (payload.type === 'done') {
+                                if (payload.markdown && typeof payload.markdown === 'string') {
+                                  newAssistantEl.innerHTML = payload.markdown;
+                                } else if (typeof payload.reply === 'string') {
+                                  newAssistantEl.textContent = payload.reply;
+                                }
+                              }
+                            }
+                          }
+                          return pumpConfirm();
+                        });
+                      }
+                      return pumpConfirm();
+                    }).catch(function (err) {
+                      newAssistantEl.classList.remove('streaming');
+                      newAssistantEl.className = 'chat-bubble error';
+                      newAssistantEl.textContent = err && err.message ? err.message : String(err);
+                    }).then(function () {
+                      newAssistantEl.classList.remove('streaming');
+                      sendBtn.disabled = false;
+                      input.disabled = false;
+                      input.focus();
+                    });
+                  }
+                  
+                  okBtn.addEventListener('click', function () { handleConfirm('ok'); });
+                  noBtn.addEventListener('click', function () { handleConfirm('no'); });
+                  
+                  actions.appendChild(okBtn);
+                  actions.appendChild(noBtn);
+                  assistantEl.parentNode.appendChild(actions);
+                }
+                
                 if (payload.threadId) {
                   currentThreadId = payload.threadId;
                   localStorage.setItem('currentThreadId', currentThreadId);

@@ -45,6 +45,7 @@ export interface TelegramMessage {
 export interface TelegramUpdate {
   readonly update_id: number;
   readonly message?: TelegramMessage;
+  readonly callback_query?: CallbackQuery;
 }
 
 export interface GetUpdatesParams {
@@ -53,15 +54,38 @@ export interface GetUpdatesParams {
   readonly limit?: number;
 }
 
+export interface InlineKeyboardButton {
+  readonly text: string;
+  readonly callback_data?: string;
+}
+
+export interface InlineKeyboardMarkup {
+  readonly inline_keyboard: readonly InlineKeyboardButton[][];
+}
+
 export interface SendMessageParams {
   readonly chatId: number;
   readonly text: string;
+  readonly reply_markup?: InlineKeyboardMarkup;
 }
 
 export interface EditMessageTextParams {
   readonly chatId: number;
   readonly messageId: number;
   readonly text: string;
+  readonly reply_markup?: InlineKeyboardMarkup;
+}
+
+export interface CallbackQuery {
+  readonly id: string;
+  readonly from: TelegramUser;
+  readonly message?: TelegramMessage;
+  readonly data?: string;
+}
+
+export interface AnswerCallbackQueryParams {
+  readonly callbackQueryId: string;
+  readonly text?: string;
 }
 
 export class TelegramApiError extends Error {
@@ -133,21 +157,40 @@ export class TelegramApi {
   }
 
   async sendMessage(params: SendMessageParams): Promise<TelegramMessage> {
-    return await this.callApi<TelegramMessage>('sendMessage', {
+    const body: Record<string, unknown> = {
       chat_id: params.chatId,
       text: params.text,
-    });
+    };
+    if (params.reply_markup !== undefined) {
+      body.reply_markup = params.reply_markup;
+    }
+    return await this.callApi<TelegramMessage>('sendMessage', body);
   }
 
   /** Replaces the text of an already sent message (used for live streaming). */
   async editMessageText(
     params: EditMessageTextParams,
   ): Promise<TelegramMessage> {
-    return await this.callApi<TelegramMessage>('editMessageText', {
+    const body: Record<string, unknown> = {
       chat_id: params.chatId,
       message_id: params.messageId,
       text: params.text,
-    });
+    };
+    if (params.reply_markup !== undefined) {
+      body.reply_markup = params.reply_markup;
+    }
+    return await this.callApi<TelegramMessage>('editMessageText', body);
+  }
+
+  /** Answers a callback query (inline keyboard button press). */
+  async answerCallbackQuery(params: AnswerCallbackQueryParams): Promise<boolean> {
+    const body: Record<string, unknown> = {
+      callback_query_id: params.callbackQueryId,
+    };
+    if (params.text !== undefined) {
+      body.text = params.text;
+    }
+    return await this.callApi<boolean>('answerCallbackQuery', body);
   }
 
   /**
