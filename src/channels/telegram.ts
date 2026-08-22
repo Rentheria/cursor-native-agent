@@ -173,6 +173,7 @@ export async function dispatchInboundMessage(params: {
       
       const liveReply = createTelegramLiveReply({ api, chatId: inbound.chatId });
       const workspacePath = resolveTelegramWorkspace(params.allowlist.repoRoot ?? '', inbound.chatId);
+      const threadId = getTelegramThreadId(inbound.chatId);
       console.error(`[telegram] Using per-chat workspace: ${workspacePath}`);
       
       let result: AgentTurnResult;
@@ -184,6 +185,7 @@ export async function dispatchInboundMessage(params: {
           }),
           true,
           workspacePath,
+          threadId,
         );
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -369,6 +371,7 @@ async function handleCallbackQuery(
     
     const liveReply = createTelegramLiveReply({ api, chatId });
     const workspacePath = resolveTelegramWorkspace(allowlist.repoRoot ?? '', chatId);
+    const threadId = getTelegramThreadId(chatId);
     
     let result: AgentTurnResult;
     try {
@@ -379,6 +382,7 @@ async function handleCallbackQuery(
         }),
         true,
         workspacePath,
+        threadId,
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

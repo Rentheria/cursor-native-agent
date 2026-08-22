@@ -881,6 +881,152 @@ describe('Telegram confirmación de build', () => {
     assert.equal(sent.length, 1);
     assert.match(sent[0] ?? '', /cancelled/i);
   });
+
+  it('callback_confirmar_debe_reutilizar_threadId_telegram_chat_id', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { setPendingTelegramForce } = await import('../core/pending-force.js');
+    const { appendToThread } = await import('../lib/threads-store.js');
+    const { createOrResetThread } = await import('../lib/threads-store.js');
+    
+    const repoRoot = await mkdtemp(join(tmpdir(), 'telegram-callback-thread-test-'));
+    try {
+      const chatId = 5555;
+      const expectedThreadId = `telegram-chat-${chatId}`;
+      
+      // Pre-crear thread con /start
+      await createOrResetThread(repoRoot, expectedThreadId);
+      
+      // Simular pending confirmation
+      setPendingTelegramForce(chatId, 'crear calculadora');
+      
+      const api = createTelegramApi({
+        token: 't',
+        apiBase: 'https://telegram.test',
+        fetchFn: async (input, init) => {
+          const url = String(input);
+          if (url.includes('getUpdates')) {
+            return jsonResponse({
+              ok: true,
+              result: [
+                {
+                  update_id: 1,
+                  callback_query: {
+                    id: 'cbq123',
+                    from: { id: 1, username: 'demo' },
+                    message: {
+                      message_id: 10,
+                      chat: { id: chatId },
+                      text: '¿Confirmar?',
+                    },
+                    data: 'confirm_ok',
+                  },
+                },
+              ],
+            });
+          }
+          if (url.includes('answerCallbackQuery')) {
+            return jsonResponse({ ok: true, result: true });
+          }
+          const body = JSON.parse(String(init?.body)) as { text: string };
+          return jsonResponse({
+            ok: true,
+            result: { message_id: 1, chat: { id: chatId }, text: body.text },
+          });
+        },
+      });
+      
+      let capturedThreadId: string | undefined;
+      
+      // Simular callback_query de Confirmar
+      await runTelegramBot({
+        repoRoot,
+        api,
+        allowlist: allowlistOf({ chats: [chatId], repoRoot }),
+        loop: false,
+        initialOffset: 0,
+        processInbound: async (_inbound, _onDelta, _confirmedForce, _workspace, threadId) => {
+          capturedThreadId = threadId;
+          // Simular append al thread
+          if (threadId !== undefined) {
+            await appendToThread(repoRoot, threadId, 'user', 'crear calculadora');
+            await appendToThread(repoRoot, threadId, 'assistant', 'Calculadora creada');
+          }
+          return { reply: 'Calculadora creada', stderr: '', exitCode: 0 };
+        },
+      });
+      
+      // Verificar que se usó el threadId correcto
+      assert.equal(capturedThreadId, expectedThreadId, 
+        `callback_query debe usar ${expectedThreadId}, pero usó ${capturedThreadId ?? 'undefined'}`);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('slash_ok_debe_reutilizar_threadId_telegram_chat_id', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { setPendingTelegramForce } = await import('../core/pending-force.js');
+    const { appendToThread } = await import('../lib/threads-store.js');
+    const { createOrResetThread } = await import('../lib/threads-store.js');
+    
+    const repoRoot = await mkdtemp(join(tmpdir(), 'telegram-ok-thread-test-'));
+    try {
+      const chatId = 6666;
+      const expectedThreadId = `telegram-chat-${chatId}`;
+      
+      // Pre-crear thread con /start
+      await createOrResetThread(repoRoot, expectedThreadId);
+      
+      // Simular pending confirmation
+      setPendingTelegramForce(chatId, 'crear servidor web');
+      
+      const api = createTelegramApi({
+        token: 't',
+        apiBase: 'https://telegram.test',
+        fetchFn: async (_input, init) => {
+          const body = JSON.parse(String(init?.body)) as { text: string };
+          return jsonResponse({
+            ok: true,
+            result: { message_id: 1, chat: { id: chatId }, text: body.text },
+          });
+        },
+      });
+      
+      let capturedThreadId: string | undefined;
+      
+      await dispatchInboundMessage({
+        inbound: {
+          updateId: 1,
+          messageId: 1,
+          chatId,
+          text: '/ok',
+          fromUserId: 1,
+          fromUsername: 'demo',
+        },
+        api,
+        allowlist: allowlistOf({ chats: [chatId], repoRoot }),
+        processInbound: async (_inbound, _onDelta, _confirmedForce, _workspace, threadId) => {
+          capturedThreadId = threadId;
+          // Simular append al thread
+          if (threadId !== undefined) {
+            await appendToThread(repoRoot, threadId, 'user', 'crear servidor web');
+            await appendToThread(repoRoot, threadId, 'assistant', 'Servidor web creado');
+          }
+          return { reply: 'Servidor web creado', stderr: '', exitCode: 0 };
+        },
+      });
+      
+      // Verificar que se usó el threadId correcto
+      assert.equal(capturedThreadId, expectedThreadId, 
+        `/ok debe usar ${expectedThreadId}, pero usó ${capturedThreadId ?? 'undefined'}`);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 function allowlistOf(params: {
