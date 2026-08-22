@@ -133,6 +133,8 @@ function printNextSteps(): void {
   console.error('');
   console.error('✅ Setup complete!');
   console.error('');
+  printSecurityReminder();
+  console.error('');
   console.error('Next steps:');
   console.error('');
   console.error('  1. Try the agent with a prompt:');
@@ -151,6 +153,18 @@ function printNextSteps(): void {
   console.error('     (runs --check-only; notifies Telegram only when needed)');
   console.error('');
   console.error('Learn more: README.md and TUTORIAL.md');
+  console.error('');
+}
+
+function printSecurityReminder(): void {
+  console.error('📌 Qué debes saber:');
+  console.error('');
+  console.error('  • Dashboard solo en 127.0.0.1; chat requiere DASHBOARD_TOKEN de .env');
+  console.error('  • Agente corre con --trust; dashboard/Telegram piden Confirmar antes de escribir');
+  console.error('  • Nunca commitees .env (token, Telegram). threads/ y workspace/ están en .gitignore');
+  console.error('  • Telegram opcional; falla cerrado sin allowlist');
+  console.error('');
+  console.error('  Para uso personal — cada quien lo corre en su propia máquina.');
   console.error('');
 }
 

@@ -21,6 +21,10 @@ npm run setup
 crea `.env` con defaults seguros, y crea `workspace/` (directorio para
 proyectos de usuario). Al final imprime los tres comandos siguientes.
 
+**Para uso personal:** Este es un agente download-and-run (cada quien en su
+máquina). Dashboard solo en `127.0.0.1`; token en `.env`; confirm before writes.
+Nunca commitees `.env`. Ver sección "Para uso personal / seguridad" en README.
+
 ## Requisitos previos
 
 | Pieza | Versión / nota |
@@ -238,6 +242,27 @@ intención de build automáticamente por frases como "haz un/una", "make a", "bu
 de artefactos (app, calculadora, splitter, proyecto, etc.). Si el prompt de build está
 underspecified, el agente puede pedirte 2-4 aclaraciones antes de construir (lenguaje, UI,
 alcance, cómo correrlo). Prompts bien especificados construyen directamente sin preguntar.
+
+## Para uso personal / seguridad
+
+Este es un **agente personal download-and-run**: cada persona lo corre en su
+propia máquina (tu cuenta Cursor, tu billing). No es SaaS multi-tenant.
+
+**Modelo de seguridad (barra: extraños pueden dejarlo encendido diariamente):**
+
+- **Dashboard** solo escucha en `127.0.0.1` (localhost). El chat requiere
+  `DASHBOARD_TOKEN` de `.env` (generado automáticamente en `npm run setup`).
+  Usa el header `X-Dashboard-Token` o `Authorization: Bearer`.
+- **Agente** corre con `--trust` sobre el workspace. Dashboard y Telegram piden
+  **Confirmar** antes de escribir archivos (`--force` bajo workspace/).
+- **Nunca commitees `.env`** (contiene token, Telegram secrets). `threads/` y
+  `workspace/` ya están en `.gitignore`.
+- **Telegram** opcional; falla cerrado sin `TELEGRAM_ALLOWED_CHAT_IDS` (allowlist
+  obligatoria).
+
+No expongas el puerto del dashboard a internet sin autenticación adicional.
+El meetup es contexto histórico (footnote); el framing es agente personal
+localhost.
 
 ## Comandos principales
 
