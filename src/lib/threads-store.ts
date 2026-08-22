@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export const THREADS_DIR_NAME = 'threads';
 export const MAX_MESSAGES_PER_THREAD = 50;
+export const MAX_THREAD_CONTEXT_CHARS = 14000;
 
 export type ThreadMessage = {
   readonly role: 'user' | 'assistant';
@@ -235,6 +236,7 @@ export async function listThreads(repoRoot: string): Promise<readonly ThreadSumm
 
 /**
  * Builds context string from recent thread messages (last N exchanges).
+ * Also caps total character length to MAX_THREAD_CONTEXT_CHARS.
  * Returns empty string if thread not found or has no messages.
  */
 export async function buildThreadContext(
@@ -250,10 +252,23 @@ export async function buildThreadContext(
   // Take last N*2 messages (each exchange is user + assistant)
   const recentMessages = thread.messages.slice(-(lastNExchanges * 2));
   
-  const lines: string[] = ['## Contexto de conversación reciente\n'];
+  const header = '## Contexto de conversación reciente\n';
+  const lines: string[] = [header];
+  let currentLength = header.length;
+  
+  // Add messages from newest to oldest, respecting char limit
   for (const msg of recentMessages) {
     const role = msg.role === 'user' ? 'Usuario' : 'Asistente';
-    lines.push(`**${role}:** ${msg.content}\n`);
+    const line = `**${role}:** ${msg.content}\n\n`;
+    const lineLength = line.length;
+    
+    // Check if adding this message would exceed the char limit
+    if (currentLength + lineLength > MAX_THREAD_CONTEXT_CHARS) {
+      break;
+    }
+    
+    lines.push(line);
+    currentLength += lineLength;
   }
   
   return lines.join('\n');
