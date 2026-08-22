@@ -881,7 +881,7 @@ function chatStyles(): string {
     .chat-row.assistant, .chat-row.error { justify-content: flex-start; }
     .chat-bubble {
       max-width: min(42rem, 88%);
-      padding: 0.75rem 0.95rem;
+      padding: 0.55rem 0.75rem;
       border-radius: var(--radius);
       white-space: pre-wrap;
       word-break: break-word;
@@ -890,7 +890,7 @@ function chatStyles(): string {
       box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent);
     }
     .chat-bubble h2, .chat-bubble h3, .chat-bubble h4 {
-      margin: 0.85rem 0 0.45rem;
+      margin: 0.5rem 0 0.3rem;
       font-weight: 600;
     }
     .chat-bubble h2:first-child, .chat-bubble h3:first-child, .chat-bubble h4:first-child {
@@ -900,7 +900,7 @@ function chatStyles(): string {
     .chat-bubble h3 { font-size: 1.05rem; }
     .chat-bubble h4 { font-size: 0.98rem; }
     .chat-bubble p {
-      margin: 0.45rem 0;
+      margin: 0.3rem 0;
     }
     .chat-bubble p:first-child {
       margin-top: 0;
@@ -917,21 +917,21 @@ function chatStyles(): string {
     }
     .chat-bubble pre {
       background: color-mix(in srgb, var(--ink) 5%, transparent);
-      padding: 0.65rem 0.75rem;
+      padding: 0.45rem 0.55rem;
       border-radius: 0.5rem;
       overflow-x: auto;
-      margin: 0.65rem 0;
+      margin: 0.4rem 0;
     }
     .chat-bubble pre code {
       background: none;
       padding: 0;
     }
     .chat-bubble ul, .chat-bubble ol {
-      margin: 0.45rem 0;
+      margin: 0.3rem 0;
       padding-left: 1.5rem;
     }
     .chat-bubble li {
-      margin: 0.25rem 0;
+      margin: 0.15rem 0;
     }
     .chat-bubble table {
       border-collapse: collapse;
