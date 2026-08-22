@@ -17,6 +17,10 @@ import {
 import { MEMORY_INDEX_FILE_NAME } from '../lib/constants.js';
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding } from '../lib/onboarding.js';
+import {
+  loadThread,
+  listThreads,
+} from '../lib/threads-store.js';
 import { renderDashboardHtml, type DashboardSnapshot } from './html.js';
 import { renderMarkdown } from './markdown.js';
 import {
@@ -37,6 +41,7 @@ export type ChatTurnRunner = (options: {
   readonly userPrompt: string;
   readonly confirmedForce?: boolean;
   readonly context?: { userPrompt: string; assistantReply: string };
+  readonly threadId?: string;
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
 
@@ -166,6 +171,54 @@ export async function handleRequest(
       return;
     }
     await handleChatPost(req, res, options, rateLimitMap, server);
+    return;
+  }
+
+  if (pathname === '/api/threads') {
+    if (!chatEnabled) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        message: 'Threads are only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (method === 'GET' || method === 'HEAD') {
+      const summaries = await listThreads(options.repoRoot);
+      sendJson(res, 200, { threads: summaries }, method === 'HEAD', chatEnabled);
+      return;
+    }
+    sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: 'Use GET /api/threads to list threads.',
+    }, false, chatEnabled);
+    return;
+  }
+
+  if (pathname.startsWith('/api/threads/')) {
+    if (!chatEnabled) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        message: 'Threads are only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    const threadId = pathname.slice('/api/threads/'.length);
+    if (method === 'GET' || method === 'HEAD') {
+      const thread = await loadThread(options.repoRoot, threadId);
+      if (thread === undefined) {
+        sendJson(res, 404, {
+          error: 'not_found',
+          message: `Thread ${threadId} not found.`,
+        }, false, chatEnabled);
+        return;
+      }
+      sendJson(res, 200, { thread }, method === 'HEAD', chatEnabled);
+      return;
+    }
+    sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: `Use GET /api/threads/${threadId} to load a thread.`,
+    }, false, chatEnabled);
     return;
   }
 
@@ -334,6 +387,7 @@ async function handleChatPost(
   }
 
   const context = extractChatContext(body);
+  const threadId = extractThreadId(body);
 
   // Check for confirmation commands
   const lowerPrompt = prompt.toLowerCase().trim();
@@ -358,6 +412,7 @@ async function handleChatPost(
         repoRoot: options.repoRoot,
         userPrompt: pendingPrompt,
         confirmedForce: true,
+        ...(threadId !== undefined ? { threadId } : {}),
         onAssistantDelta: withoutSegmentRecaps((text) => {
           writeSseEvent(res, { type: 'delta', text });
         }),
@@ -379,6 +434,7 @@ async function handleChatPost(
         reply: result.reply,
         markdown,
         exitCode: result.exitCode,
+        ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
       });
       res.end();
     } catch (error: unknown) {
@@ -417,6 +473,7 @@ async function handleChatPost(
       repoRoot: options.repoRoot,
       userPrompt: prompt,
       ...(context !== undefined ? { context } : {}),
+      ...(threadId !== undefined ? { threadId } : {}),
       onAssistantDelta: withoutSegmentRecaps((text) => {
         writeSseEvent(res, { type: 'delta', text });
       }),
@@ -443,6 +500,7 @@ async function handleChatPost(
       reply: result.reply,
       markdown,
       exitCode: result.exitCode,
+      ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
     });
     res.end();
   } catch (error: unknown) {
@@ -459,9 +517,10 @@ async function defaultChatTurnRunner(options: {
   readonly userPrompt: string;
   readonly confirmedForce?: boolean;
   readonly context?: { userPrompt: string; assistantReply: string };
+  readonly threadId?: string;
   readonly onAssistantDelta?: (text: string) => void;
 }): Promise<AgentTurnResult> {
-  // Pass context to agent-turn; it will prepend AFTER build-intent check
+  // Pass context/threadId to agent-turn; it will prepend AFTER build-intent check
   return await runAgentTurn({
     repoRoot: options.repoRoot,
     userPrompt: options.userPrompt,
@@ -469,6 +528,7 @@ async function defaultChatTurnRunner(options: {
     safeMode: true,
     ...(options.confirmedForce !== undefined ? { confirmedForce: options.confirmedForce } : {}),
     ...(options.context !== undefined ? { context: options.context } : {}),
+    ...(options.threadId !== undefined ? { threadId: options.threadId } : {}),
     ...(options.onAssistantDelta !== undefined
       ? { onAssistantDelta: options.onAssistantDelta }
       : {}),
@@ -506,6 +566,17 @@ function extractChatContext(body: unknown): { userPrompt: string; assistantReply
   const assistantReply = (context as Record<string, unknown>)['assistantReply'];
   if (typeof userPrompt === 'string' && typeof assistantReply === 'string') {
     return { userPrompt, assistantReply };
+  }
+  return undefined;
+}
+
+function extractThreadId(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const threadId = (body as Record<string, unknown>)['threadId'];
+  if (typeof threadId === 'string' && threadId.trim() !== '') {
+    return threadId;
   }
   return undefined;
 }

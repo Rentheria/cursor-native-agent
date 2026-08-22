@@ -26,6 +26,11 @@ import {
   type WorkerDispatchResult,
 } from '../orchestration/worker-dispatch.js';
 import { WORKSPACE_DIRECTORY_NAME, WORKSPACE_PATH_ENV } from '../lib/constants.js';
+import {
+  createThread,
+  appendToThread,
+  buildThreadContext,
+} from '../lib/threads-store.js';
 
 export type AgentRunner = (options: {
   readonly prompt: string;
@@ -52,12 +57,20 @@ export interface AgentTurnResult {
    * before running with --force. The caller should ask for confirmation and re-run.
    */
   readonly requiresForceConfirmation?: boolean;
+  /** Thread ID if this turn is part of a persisted conversation. */
+  readonly threadId?: string;
 }
 
 export interface AgentTurnOptions {
   readonly repoRoot: string;
   readonly userPrompt: string;
   readonly debug?: boolean;
+  /**
+   * Optional thread ID. When provided, loads thread context and persists
+   * messages to the thread. When omitted, creates a new thread automatically
+   * (dashboard/Telegram) or runs one-shot (CLI).
+   */
+  readonly threadId?: string;
   /** Injected for tests; defaults to real `runCursorAgent`. */
   readonly runAgent?: AgentRunner;
   /** Injected for tests; defaults to real `dispatchWorker`. */
@@ -108,11 +121,15 @@ function resolveWorkspacePath(
 /**
  * Same pipeline as `npm run agent`: skills + memory (+ optional delegation) →
  * `cursor-agent -p`. Shared by the CLI and channel entrypoints.
+ * 
+ * Thread handling: When threadId is provided, loads thread context and persists
+ * the exchange. When threadId is omitted and safeMode is true (dashboard/Telegram),
+ * creates a new thread automatically. CLI stays one-shot (no threadId, no safeMode).
  */
 export async function runAgentTurn(
   options: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
-  const { repoRoot, userPrompt } = options;
+  const { repoRoot, userPrompt} = options;
   const debug = options.debug === true;
   const runAgent = options.runAgent ?? runCursorAgent;
   const totalStart = performance.now();
@@ -122,6 +139,24 @@ export async function runAgentTurn(
   if (userPrompt.trim() === '') {
     throw new Error('Empty prompt.');
   }
+
+  // Thread handling: create new thread or load existing
+  const safeMode = options.safeMode === true;
+  let effectiveThreadId = options.threadId;
+  let threadContext = '';
+  
+  if (effectiveThreadId !== undefined) {
+    // Load existing thread context and append user message
+    threadContext = await buildThreadContext(repoRoot, effectiveThreadId, 5);
+    await appendToThread(repoRoot, effectiveThreadId, 'user', userPrompt);
+    console.error(`[agent] Continuing thread: ${effectiveThreadId}`);
+  } else if (safeMode) {
+    // Dashboard/Telegram: create new thread automatically with initial user message
+    const newThread = await createThread(repoRoot, userPrompt);
+    effectiveThreadId = newThread.id;
+    console.error(`[agent] Created new thread: ${effectiveThreadId}`);
+  }
+  // CLI (no safeMode, no threadId): stay one-shot, no thread persistence
 
   try {
     console.error('[agent] Loading skills…');
@@ -148,10 +183,17 @@ export async function runAgentTurn(
     if (hasStagePitch) {
       console.error('[agent] stage-pitch matched: returning canned pitch (no model call)');
       const cannedReply = getCannedPitch(userPrompt);
+      
+      // Persist to thread if applicable
+      if (effectiveThreadId !== undefined) {
+        await appendToThread(repoRoot, effectiveThreadId, 'assistant', cannedReply);
+      }
+      
       const cannedResult: AgentTurnResult = {
         reply: cannedReply,
         stderr: '',
         exitCode: 0,
+        ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
       };
       
       const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
@@ -179,10 +221,17 @@ export async function runAgentTurn(
     if (hasGitCommit && !existsSync(path.join(repoRoot, '.git'))) {
       console.error('[agent] git-commit matched but no .git folder: refusing to init or commit everything');
       const safetyReply = 'No git repository detected. Will not run `git init` or commit the entire tree. Please run this command inside a real git clone.';
+      
+      // Persist to thread if applicable
+      if (effectiveThreadId !== undefined) {
+        await appendToThread(repoRoot, effectiveThreadId, 'assistant', safetyReply);
+      }
+      
       const safetyResult: AgentTurnResult = {
         reply: safetyReply,
         stderr: '',
         exitCode: 0,
+        ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
       };
       
       const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
@@ -267,11 +316,13 @@ Please confirm:
 
 The confirmation expires in 10 minutes.`;
       
+      // Do NOT persist confirmation prompt to thread
       const confirmResult: AgentTurnResult = {
         reply: confirmationReply,
         stderr: '',
         exitCode: 0,
         requiresForceConfirmation: true,
+        ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
       };
       
       if (report !== undefined) {
@@ -287,10 +338,16 @@ The confirmation expires in 10 minutes.`;
       return confirmResult;
     }
     
-    // Prepend context AFTER build-intent check (context is for the model, not for intent detection)
-    const effectivePrompt = options.context !== undefined
-      ? `Previous exchange:\nUser: ${options.context.userPrompt}\nAssistant: ${options.context.assistantReply}\n\nCurrent message:\n${userPrompt}`
-      : userPrompt;
+    // Prepend context/thread history AFTER build-intent check
+    // Thread context has priority over options.context (deprecated in favor of threads)
+    let effectivePrompt = userPrompt;
+    if (threadContext !== '' && !isBuildRequest) {
+      // Thread history: prepend last N exchanges
+      effectivePrompt = `Previous conversation:\n${threadContext}\n\nCurrent message:\n${userPrompt}`;
+    } else if (options.context !== undefined && !isBuildRequest) {
+      // Legacy context (dashboard): prepend previous turn
+      effectivePrompt = `Previous exchange:\nUser: ${options.context.userPrompt}\nAssistant: ${options.context.assistantReply}\n\nCurrent message:\n${userPrompt}`;
+    }
     
     const assembled = assemblePrompt({
       userPrompt: effectivePrompt,
@@ -320,7 +377,18 @@ The confirmation expires in 10 minutes.`;
     });
     cursorAgentMs += performance.now() - agentStart;
     const reply = await finalizeAgentStdout(repoRoot, result.stdout);
-    const turnResult = { reply, stderr: result.stderr, exitCode: result.exitCode };
+    
+    // Persist assistant reply to thread if applicable
+    if (effectiveThreadId !== undefined) {
+      await appendToThread(repoRoot, effectiveThreadId, 'assistant', reply);
+    }
+    
+    const turnResult: AgentTurnResult = {
+      reply,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
+    };
     if (report !== undefined) {
       await appendAgentNdjson(repoRoot, {
         ...report,

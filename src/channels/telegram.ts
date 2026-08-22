@@ -44,6 +44,7 @@ export type ProcessInboundFn = (
   onAssistantDelta: (text: string) => void,
   confirmedForce?: boolean,
   workspacePath?: string,
+  threadId?: string,
 ) => Promise<AgentTurnResult>;
 
 export interface TelegramBotOptions {
@@ -72,6 +73,7 @@ function isSlashCommand(text: string): boolean {
 
 /**
  * Returns a canned reply for slash commands, asking the user to send a real prompt.
+ * /start creates a fresh thread for the chat.
  */
 function getSlashCommandReply(command: string): string {
   const lower = command.toLowerCase().trim();
@@ -81,7 +83,17 @@ function getSlashCommandReply(command: string): string {
   if (lower.startsWith('/no')) {
     return 'No pending confirmation to cancel. Send a build request to get started.';
   }
+  if (lower.startsWith('/start')) {
+    return 'Conversación iniciada. Envía tu prompt / Conversation started. Send your prompt.';
+  }
   return 'Por favor, envía un prompt real, por ejemplo: "qué hace este repo" / Please send a real prompt, e.g. "what does this repo do"';
+}
+
+/**
+ * Generates a stable thread ID for a Telegram chatId.
+ */
+function getTelegramThreadId(chatId: number): string {
+  return `telegram-chat-${chatId}`;
 }
 
 /**
@@ -215,6 +227,7 @@ export async function dispatchInboundMessage(params: {
 
   const liveReply = createTelegramLiveReply({ api, chatId: inbound.chatId });
   const workspacePath = resolveTelegramWorkspace(params.allowlist.repoRoot ?? '', inbound.chatId);
+  const threadId = getTelegramThreadId(inbound.chatId);
 
   let result: AgentTurnResult;
   try {
@@ -225,6 +238,7 @@ export async function dispatchInboundMessage(params: {
       }),
       false,
       workspacePath,
+      threadId,
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -271,7 +285,7 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
   // same as dashboard chat (/api/chat). Tests inject their own processInbound.
   const processInbound =
     options.processInbound ??
-    (async (inbound, onAssistantDelta, confirmedForce, workspacePath) =>
+    (async (inbound, onAssistantDelta, confirmedForce, workspacePath, threadId) =>
       runAgentTurn({
         repoRoot: options.repoRoot,
         userPrompt: inbound.text,
@@ -279,6 +293,7 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
         safeMode: true,
         ...(confirmedForce !== undefined ? { confirmedForce } : {}),
         ...(workspacePath !== undefined ? { workspacePath } : {}),
+        ...(threadId !== undefined ? { threadId } : {}),
         onAssistantDelta,
       }));
 
