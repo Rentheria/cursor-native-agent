@@ -32,6 +32,7 @@ import {
 export const DEFAULT_DASHBOARD_PORT = 3847;
 export const CRON_LOG_RELATIVE_PATH = 'logs/cron.log';
 export const DASHBOARD_CHAT_ENV = 'CURSOR_NATIVE_AGENT_DASHBOARD_CHAT';
+export const DASHBOARD_TOKEN_ENV = 'DASHBOARD_TOKEN';
 export const MAX_JSON_BODY_BYTES = 256 * 1024;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 export const RATE_LIMIT_MAX_REQUESTS = 10;
@@ -62,6 +63,8 @@ export type DashboardServerOptions = {
   readonly runChatTurn?: ChatTurnRunner;
   /** Override listen port for origin checks (tests only). */
   readonly listenPort?: number;
+  /** Override dashboard token for tests. */
+  readonly dashboardToken?: string;
 };
 
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD']);
@@ -80,6 +83,20 @@ export function isDashboardChatEnabled(
     return true;
   }
   return flag !== '0' && flag !== 'false' && flag !== 'off';
+}
+
+/**
+ * Resolves the dashboard token from environment or options.
+ * Returns undefined if not configured.
+ */
+export function resolveDashboardToken(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const token = env[DASHBOARD_TOKEN_ENV];
+  if (token === undefined || token.trim() === '') {
+    return undefined;
+  }
+  return token.trim();
 }
 
 /** Resolves listen port from `PORT` env (default 3847). */
@@ -154,12 +171,20 @@ export async function handleRequest(
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
   const pathname = url.pathname;
   const chatEnabled = resolveChatEnabled(options);
+  const requiredToken = options.dashboardToken ?? resolveDashboardToken();
 
   if (pathname === '/api/chat') {
     if (!chatEnabled) {
       sendJson(res, 404, {
         error: 'not_found',
         message: 'Chat is disabled. Remove CURSOR_NATIVE_AGENT_DASHBOARD_CHAT or unset it to enable.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (!isTokenValid(req, requiredToken)) {
+      sendJson(res, 401, {
+        error: 'unauthorized',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
       }, false, chatEnabled);
       return;
     }
@@ -182,6 +207,13 @@ export async function handleRequest(
       }, false, chatEnabled);
       return;
     }
+    if (!isTokenValid(req, requiredToken)) {
+      sendJson(res, 401, {
+        error: 'unauthorized',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+      }, false, chatEnabled);
+      return;
+    }
     if (method === 'GET' || method === 'HEAD') {
       const summaries = await listThreads(options.repoRoot);
       sendJson(res, 200, { threads: summaries }, method === 'HEAD', chatEnabled);
@@ -199,6 +231,13 @@ export async function handleRequest(
       sendJson(res, 404, {
         error: 'not_found',
         message: 'Threads are only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (!isTokenValid(req, requiredToken)) {
+      sendJson(res, 401, {
+        error: 'unauthorized',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
       }, false, chatEnabled);
       return;
     }
@@ -223,6 +262,13 @@ export async function handleRequest(
   }
 
   if (pathname === '/api/markdown') {
+    if (!isTokenValid(req, requiredToken)) {
+      sendJson(res, 401, {
+        error: 'unauthorized',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+      }, false, chatEnabled);
+      return;
+    }
     if (method !== 'POST') {
       sendJson(res, 405, {
         error: 'method_not_allowed',
@@ -634,6 +680,32 @@ function isOriginAllowed(req: IncomingMessage, port: number): boolean {
     }
   }
   
+  return false;
+}
+
+/**
+ * Validates the dashboard token from the request headers.
+ * Checks X-Dashboard-Token and Authorization: Bearer headers.
+ * Returns true if token is not configured (open access) or if token matches.
+ */
+function isTokenValid(req: IncomingMessage, requiredToken: string | undefined): boolean {
+  if (requiredToken === undefined) {
+    return true;
+  }
+
+  const xToken = req.headers['x-dashboard-token'];
+  if (typeof xToken === 'string' && xToken === requiredToken) {
+    return true;
+  }
+
+  const authorization = req.headers['authorization'];
+  if (typeof authorization === 'string') {
+    const parts = authorization.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer' && parts[1] === requiredToken) {
+      return true;
+    }
+  }
+
   return false;
 }
 

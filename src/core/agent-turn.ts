@@ -17,7 +17,11 @@ import {
   hasDelegationIntent,
 } from './delegation.js';
 import { loadMemoryForPrompt } from '../loaders/memory-loader.js';
-import { applyMemoryWritesFromText } from '../loaders/memory-writer.js';
+import {
+  applyMemoryWritesFromText,
+  writeMemoryEntry,
+  slugifyMemoryTitle,
+} from '../loaders/memory-writer.js';
 import { assemblePrompt } from './prompt-builder.js';
 import { loadAllSkills, selectRelevantSkills } from '../loaders/skills-loader.js';
 import {
@@ -376,7 +380,7 @@ The confirmation expires in 10 minutes.`;
       ...streamRunnerOptions(options.stream === true, options.onAssistantDelta),
     });
     cursorAgentMs += performance.now() - agentStart;
-    const reply = await finalizeAgentStdout(repoRoot, result.stdout);
+    const reply = await finalizeAgentStdout(repoRoot, result.stdout, userPrompt);
     
     // Persist assistant reply to thread if applicable
     if (effectiveThreadId !== undefined) {
@@ -463,7 +467,7 @@ async function runDelegatedTurn(params: {
     ...streamRunnerOptions(params.stream, params.onAssistantDelta),
   });
   params.onCursorAgentMs(performance.now() - agentStart);
-  const reply = await finalizeAgentStdout(params.repoRoot, result.stdout);
+  const reply = await finalizeAgentStdout(params.repoRoot, result.stdout, params.userPrompt);
   const turnResult = { reply, stderr: result.stderr, exitCode: result.exitCode };
   return turnResult;
 }
@@ -487,10 +491,14 @@ function streamRunnerOptions(
 /**
  * Applies any `<<<MEMORY_WRITE…>>>` blocks (remember skill), logs visibly on
  * stderr, and returns stdout with those blocks stripped.
+ * 
+ * If userPrompt is a remember intent and stdout has no MEMORY_WRITE blocks,
+ * auto-persists memory from the user prompt.
  */
 export async function finalizeAgentStdout(
   repoRoot: string,
   stdout: string,
+  userPrompt?: string,
 ): Promise<string> {
   const { cleanedText, writes } = await applyMemoryWritesFromText(repoRoot, stdout);
   if (writes.length > 0) {
@@ -498,7 +506,87 @@ export async function finalizeAgentStdout(
       `[memory] Applied ${String(writes.length)} memory write(s) this turn`,
     );
   }
+  
+  if (userPrompt !== undefined && writes.length === 0 && isRememberIntent(userPrompt)) {
+    const memoryPayload = extractRememberPayload(userPrompt);
+    if (memoryPayload !== undefined && !looksLikeSecret(memoryPayload)) {
+      try {
+        const slug = slugifyMemoryTitle(memoryPayload.substring(0, 50));
+        const input = {
+          slug,
+          title: memoryPayload.substring(0, 80).trim(),
+          hook: memoryPayload.substring(0, 40).trim(),
+          description: memoryPayload.substring(0, 100).trim(),
+          memoryType: 'user-preference',
+          body: memoryPayload,
+        };
+        const result = await writeMemoryEntry(repoRoot, input);
+        const action = result.detailCreated ? 'created' : 'updated';
+        console.error(`[memory] Auto-persisted: ${result.relativeLink} (${action})`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[memory] Auto-persist failed: ${message}`);
+      }
+    }
+  }
+  
   return cleanedText;
+}
+
+/**
+ * Checks if the prompt is a remember intent (recuerda/remember/memoriza/guarda en memoria).
+ */
+function isRememberIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase().trim();
+  return (
+    lower.startsWith('recuerda ') ||
+    lower.startsWith('remember ') ||
+    lower.startsWith('memoriza ') ||
+    lower.startsWith('guarda en memoria ')
+  );
+}
+
+/**
+ * Extracts the payload from a remember intent prompt.
+ * Example: "recuerda que prefiero TypeScript" → "prefiero TypeScript"
+ */
+function extractRememberPayload(prompt: string): string | undefined {
+  const patterns = [
+    /^recuerda (?:que )?(.+)$/i,
+    /^remember (?:that )?(.+)$/i,
+    /^memoriza (?:que )?(.+)$/i,
+    /^guarda en memoria (?:que )?(.+)$/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = prompt.match(pattern);
+    if (match !== null && match[1] !== undefined) {
+      return match[1].trim();
+    }
+  }
+  
+  return undefined;
+}
+
+/**
+ * Checks if text looks like a secret (tokens, keys, passwords, paths).
+ */
+function looksLikeSecret(text: string): boolean {
+  const secretPatterns = [
+    /token/i,
+    /password/i,
+    /secret/i,
+    /api[_-]?key/i,
+    /access[_-]?key/i,
+    /private[_-]?key/i,
+    /\/home\//,
+    /\/Users\//,
+    /[A-Za-z]:\\/,
+    /\bsk-[A-Za-z0-9]+/,
+    /\bxox[baprs]-[A-Za-z0-9-]+/,
+  ];
+  
+  return secretPatterns.some((pattern) => pattern.test(text));
 }
 
 /** Re-export for callers that need the env-based debug flag. */

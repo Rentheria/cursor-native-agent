@@ -915,3 +915,109 @@ describe('runAgentTurn (confirmación de --force en safeMode)', () => {
     assert.match(result.reply, /looks like a build request/i);
   });
 });
+
+describe('memoria auto-persistida sin MEMORY_WRITE block', () => {
+  it('debería_crear_memoria_cuando_prompt_es_recuerda_y_no_hay_MEMORY_WRITE', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('Entendido, lo recordaré.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'recuerda que prefiero TypeScript',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.match(memoryIndex, /prefiero-typescript/i);
+    
+    const memoryFiles = await readFile(
+      path.join(repoRoot, 'memory/prefiero-typescript.md'),
+      'utf8',
+    );
+    assert.match(memoryFiles, /prefiero TypeScript/);
+  });
+
+  it('debería_crear_memoria_con_remember_en_inglés', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('Got it.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'remember that I prefer dark mode',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.match(memoryIndex, /prefer-dark-mode/i);
+  });
+
+  it('debería_crear_memoria_con_memoriza', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('De acuerdo.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'memoriza que uso Vim como editor',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.match(memoryIndex, /uso-vim-como-editor/i);
+  });
+
+  it('NO_debería_crear_memoria_sin_intent_remember', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('TypeScript is great.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'qué opinas de TypeScript',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.doesNotMatch(memoryIndex, /typescript/i);
+  });
+
+  it('NO_debería_auto_persistir_si_payload_parece_secreto', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('Entendido.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'recuerda mi token sk-abc123def456',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.doesNotMatch(memoryIndex, /sk-abc123/);
+  });
+
+  it('NO_debería_auto_persistir_si_payload_tiene_password', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('OK.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'recuerda mi password es supersecret123',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.doesNotMatch(memoryIndex, /supersecret/);
+  });
+
+  it('NO_debería_auto_persistir_si_payload_tiene_path_home', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent } = fakeRunner('Noted.');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'recuerda que mi archivo está en /home/usuario/projects',
+      runAgent,
+    });
+
+    const memoryIndex = await readFile(path.join(repoRoot, 'MEMORY.md'), 'utf8');
+    assert.doesNotMatch(memoryIndex, /\/home\/usuario/);
+  });
+});

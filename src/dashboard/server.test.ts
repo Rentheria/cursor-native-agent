@@ -669,6 +669,173 @@ describe('dashboard POST /api/chat (opt-in)', () => {
   });
 });
 
+describe('dashboard token authentication', () => {
+  let tmpRoot = '';
+
+  before(async () => {
+    tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-dash-token-'));
+    await mkdir(path.join(tmpRoot, 'logs'), { recursive: true });
+  });
+
+  after(async () => {
+    if (tmpRoot !== '') {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('debería_rechazar_POST_/api/chat_sin_token_con_401', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res.status, 401);
+      const json = await res.json() as { error: string; message: string };
+      assert.equal(json.error, 'unauthorized');
+      assert.match(json.message, /Missing or invalid dashboard token/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_aceptar_POST_/api/chat_con_X-Dashboard-Token_válido', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+      runChatTurn: async () => ({
+        reply: 'Test reply',
+        stderr: '',
+        exitCode: 0,
+      }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"type":"done"/);
+      assert.match(text, /"reply":"Test reply"/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_aceptar_POST_/api/chat_con_Authorization_Bearer_válido', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+      runChatTurn: async () => ({
+        reply: 'Test reply',
+        stderr: '',
+        exitCode: 0,
+      }),
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer test-token',
+        },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"type":"done"/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_GET_/api/threads_sin_token_con_401', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads`);
+      assert.equal(res.status, 401);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'unauthorized');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_POST_/api/markdown_sin_token_con_401', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/markdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: '# Test' }),
+      });
+      assert.equal(res.status, 401);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'unauthorized');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('GET_/_debería_permanecer_abierto_sin_token', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: false,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/`);
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get('content-type') ?? '', /text\/html/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('GET_/api/health_debería_permanecer_abierto_sin_token', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: false,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/health`);
+      assert.equal(res.status, 200);
+      const json = await res.json() as { ok: boolean };
+      assert.equal(json.ok, true);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 /** Extrae el texto de los eventos SSE `delta`, en orden. */
 function collectSseDeltas(body: string): string[] {
   return body

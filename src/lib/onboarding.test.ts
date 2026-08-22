@@ -11,6 +11,7 @@ import {
   writeEnvFile,
   ensureWorkspaceExists,
   ensureDefaultConfig,
+  generateDashboardToken,
   type OnboardingOptions,
 } from './onboarding.js';
 
@@ -235,21 +236,23 @@ describe('onboarding', () => {
       }
     });
 
-    it('no_sobrescribe_env_existente_con_marker', () => {
-      const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
-      try {
-        const envPath = path.join(tmpRoot, '.env');
-        writeFileSync(envPath, 'CURSOR_NATIVE_AGENT_ONBOARDED=1\nCUSTOM=value\n', 'utf8');
-        
-        const wasWritten = ensureDefaultConfig(tmpRoot);
-        
-        assert.strictEqual(wasWritten, false, 'should return false when .env already has marker');
-        const content = readFileSync(envPath, 'utf8');
-        assert.ok(content.includes('CUSTOM=value'), 'should preserve existing content');
-      } finally {
-        rmSync(tmpRoot, { recursive: true, force: true });
-      }
-    });
+  it('no_debería_rotar_token_existente_cuando_env_tiene_marker_y_token', () => {
+    const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
+    try {
+      const envPath = path.join(tmpRoot, '.env');
+      const existingToken = 'existing-test-token-123';
+      writeFileSync(envPath, `CURSOR_NATIVE_AGENT_ONBOARDED=1\nCUSTOM=value\nDASHBOARD_TOKEN=${existingToken}\n`, 'utf8');
+      
+      const wasWritten = ensureDefaultConfig(tmpRoot);
+      
+      assert.strictEqual(wasWritten, false, 'should return false when .env already has marker and token');
+      const content = readFileSync(envPath, 'utf8');
+      assert.ok(content.includes('CUSTOM=value'), 'should preserve existing content');
+      assert.ok(content.includes(`DASHBOARD_TOKEN=${existingToken}`), 'should preserve existing token');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 
     it('sobrescribe_env_sin_marker', () => {
       const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
@@ -263,6 +266,97 @@ describe('onboarding', () => {
         const content = readFileSync(envPath, 'utf8');
         assert.ok(content.includes('CURSOR_NATIVE_AGENT_ONBOARDED=1'));
         assert.ok(content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+      } finally {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('generateDashboardToken', () => {
+    it('debería_generar_token_no_vacío', () => {
+      const token = generateDashboardToken();
+      assert.ok(token.length > 0);
+    });
+
+    it('debería_generar_tokens_únicos', () => {
+      const token1 = generateDashboardToken();
+      const token2 = generateDashboardToken();
+      assert.notEqual(token1, token2);
+    });
+
+    it('debería_generar_token_base64url_seguro', () => {
+      const token = generateDashboardToken();
+      assert.match(token, /^[A-Za-z0-9_-]+$/);
+    });
+  });
+
+  describe('getDefaultConfig', () => {
+    it('debería_incluir_DASHBOARD_TOKEN_generado', () => {
+      const config = getDefaultConfig();
+      assert.ok(config.DASHBOARD_TOKEN);
+      assert.ok(config.DASHBOARD_TOKEN.length > 0);
+    });
+  });
+
+  describe('writeEnvFile', () => {
+    it('debería_escribir_DASHBOARD_TOKEN_en_env', () => {
+      const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
+      try {
+        const config = getDefaultConfig();
+        writeEnvFile(tmpRoot, config);
+        const envPath = path.join(tmpRoot, '.env');
+        const content = readFileSync(envPath, 'utf8');
+        assert.ok(content.includes(`DASHBOARD_TOKEN=${config.DASHBOARD_TOKEN}`));
+      } finally {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('ensureDefaultConfig con token', () => {
+    it('debería_generar_token_cuando_env_falta', () => {
+      const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
+      try {
+        const envPath = path.join(tmpRoot, '.env');
+        assert.ok(!existsSync(envPath));
+        
+        ensureDefaultConfig(tmpRoot);
+        
+        const content = readFileSync(envPath, 'utf8');
+        assert.match(content, /^DASHBOARD_TOKEN=.+$/m);
+      } finally {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('debería_agregar_token_si_env_existe_sin_token', () => {
+      const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
+      try {
+        const envPath = path.join(tmpRoot, '.env');
+        writeFileSync(envPath, 'CURSOR_NATIVE_AGENT_ONBOARDED=1\nCURSOR_AGENT_MODEL=composer-2.5-fast\n', 'utf8');
+        
+        const wasWritten = ensureDefaultConfig(tmpRoot);
+        
+        assert.strictEqual(wasWritten, true);
+        const content = readFileSync(envPath, 'utf8');
+        assert.match(content, /^DASHBOARD_TOKEN=.+$/m);
+      } finally {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('no_debería_rotar_token_existente', () => {
+      const tmpRoot = mkdtempSync(path.join(tmpdir(), 'onboard-test-'));
+      try {
+        const envPath = path.join(tmpRoot, '.env');
+        const existingToken = 'existing-test-token-123';
+        writeFileSync(envPath, `CURSOR_NATIVE_AGENT_ONBOARDED=1\nDASHBOARD_TOKEN=${existingToken}\n`, 'utf8');
+        
+        const wasWritten = ensureDefaultConfig(tmpRoot);
+        
+        assert.strictEqual(wasWritten, false);
+        const content = readFileSync(envPath, 'utf8');
+        assert.ok(content.includes(`DASHBOARD_TOKEN=${existingToken}`));
       } finally {
         rmSync(tmpRoot, { recursive: true, force: true });
       }
