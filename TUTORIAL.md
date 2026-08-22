@@ -236,6 +236,24 @@ Copia `.env.example` → `.env` si quieres config en un solo archivo (Unix:
 `cp .env.example .env`, Windows: `copy .env.example .env`). Las vars
 ya exportadas en el shell **no** se pisan.
 
+### Trust boundary para canales remotos
+
+Dashboard y Telegram corren en **safe mode** por default: workspace de usuario aislado,
+sin `--force` hasta confirmar builds. CLI (`npm run agent`) conserva `--force` directo
+(la persona ya tipeó el prompt en su terminal).
+
+**Confirmación de builds:**
+- Telegram y dashboard piden confirmación antes de construir apps/scripts que escriben archivos.
+- Primer prompt de build: te preguntan `/ok` o `/no`.
+- Después de `/ok`: se ejecuta el build con `--force` (escribe bajo el workspace configurado).
+- Telegram builds aísla por chat: cada chat ID escribe en `workspace/telegram/<chatId>/`; dashboard escribe en `workspace/`.
+
+**Reabrir conversaciones:**
+- En el dashboard, hacer clic en un turno pasado lo carga en el chat actual.
+- El siguiente mensaje incluye contexto (prompt previo + respuesta) para continuar el hilo.
+
+Esto permite correr el dashboard y Telegram **sin babysitting** (personal agent, bot-like).
+
 ### Mini demos útiles
 
 ```bash

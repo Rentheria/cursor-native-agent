@@ -47,6 +47,11 @@ export interface AgentTurnResult {
   readonly reply: string;
   readonly stderr: string;
   readonly exitCode: number;
+  /**
+   * When true, this was a build request in safeMode that requires user confirmation
+   * before running with --force. The caller should ask for confirmation and re-run.
+   */
+  readonly requiresForceConfirmation?: boolean;
 }
 
 export interface AgentTurnOptions {
@@ -69,6 +74,21 @@ export interface AgentTurnOptions {
    * the wrapper repo while still trusting cursor-agent's own tooling.
    */
   readonly safeMode?: boolean;
+  /**
+   * When true, confirms that a build request in safeMode has been approved by the user.
+   * This bypasses the confirmation check and allows --force to be used.
+   */
+  readonly confirmedForce?: boolean;
+  /**
+   * Override workspace path (e.g., for per-chat subdirectories in Telegram).
+   * When set, this path is used instead of the default resolveWorkspacePath.
+   */
+  readonly workspacePath?: string;
+  /**
+   * Optional context from a previous turn (for dashboard conversation continuation).
+   * Prepended to the prompt sent to cursor-agent AFTER build-intent checks.
+   */
+  readonly context?: { userPrompt: string; assistantReply: string };
 }
 
 /**
@@ -230,17 +250,55 @@ export async function runAgentTurn(
       return delegated;
     }
 
-    const assembled = assemblePrompt({
-      userPrompt,
-      matchedSkills,
-      memory,
-    });
-
-    const workspacePath = resolveWorkspacePath(repoRoot);
+    const workspacePath = options.workspacePath ?? resolveWorkspacePath(repoRoot);
     // hasClarifyBuildSkill already computed above during skill injection check
     const isBuildRequest = hasClarifyBuildSkill || hasBuildIntent;
     const safeMode = options.safeMode === true;
-    // Build requests get workspace cwd and --force even in safeMode (Telegram/dashboard chat).
+    const confirmedForce = options.confirmedForce === true;
+    
+    // Build requests in safeMode require confirmation before using --force.
+    // If not confirmed, return early asking for confirmation.
+    if (isBuildRequest && safeMode && !confirmedForce) {
+      const confirmationReply = `⚠️ This looks like a build request that will write files under \`${workspacePath}/\`.
+
+Please confirm:
+- Type **/ok** or **confirm** to proceed with the build (runs with \`--force\`)
+- Type **/no** or **cancel** to cancel
+
+The confirmation expires in 10 minutes.`;
+      
+      const confirmResult: AgentTurnResult = {
+        reply: confirmationReply,
+        stderr: '',
+        exitCode: 0,
+        requiresForceConfirmation: true,
+      };
+      
+      if (report !== undefined) {
+        await appendAgentNdjson(repoRoot, {
+          ...report,
+          cursorAgentMs: 0,
+          totalMs: Math.round(performance.now() - totalStart),
+          reply: confirmResult.reply,
+          exitCode: 0,
+        });
+      }
+      
+      return confirmResult;
+    }
+    
+    // Prepend context AFTER build-intent check (context is for the model, not for intent detection)
+    const effectivePrompt = options.context !== undefined
+      ? `Previous exchange:\nUser: ${options.context.userPrompt}\nAssistant: ${options.context.assistantReply}\n\nCurrent message:\n${userPrompt}`
+      : userPrompt;
+    
+    const assembled = assemblePrompt({
+      userPrompt: effectivePrompt,
+      matchedSkills,
+      memory,
+    });
+    
+    // Build requests get workspace cwd and --force (either CLI or confirmed safeMode).
     // Non-build prompts in safeMode stay at repoRoot cwd with no --force.
     const useCwd = isBuildRequest ? workspacePath : repoRoot;
     const useForce = isBuildRequest || !safeMode;
