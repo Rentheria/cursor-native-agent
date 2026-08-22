@@ -296,14 +296,44 @@ async function runSetup(options: SetupOptions): Promise<void> {
   const envPath = path.join(repoRoot, '.env');
   if (input.isTTY && existsSync(envPath)) {
     const content = readFileSync(envPath, 'utf8');
-    const hasWorkspacePath = /^WORKSPACE_PATH=.+$/m.test(content);
+    const workspaceMatch = content.match(/^WORKSPACE_PATH=(.*)$/m);
+    const hasWorkspacePath = workspaceMatch !== null;
+    const currentWorkspacePath = hasWorkspacePath && workspaceMatch[1] !== undefined ? workspaceMatch[1].trim() : '';
     
-    // Only prompt if WORKSPACE_PATH is missing or ask if user wants to update
+    let shouldPrompt = false;
+    
     if (!hasWorkspacePath) {
       console.error('[setup] WORKSPACE_PATH no está configurado en .env');
+      shouldPrompt = true;
+    } else if (currentWorkspacePath !== '') {
+      // Already has a non-empty value; offer to update
+      console.error(`[setup] WORKSPACE_PATH actual: ${currentWorkspacePath}`);
+      const rl = createInterface({ input, output });
+      try {
+        const answer = await rl.question('¿Actualizar? [s/n] (Enter = no): ');
+        shouldPrompt = answer.trim().toLowerCase() === 's';
+      } finally {
+        rl.close();
+      }
+    } else {
+      // Has WORKSPACE_PATH= but empty; offer to set it
+      console.error('[setup] WORKSPACE_PATH está vacío (default: <repo>/workspace)');
+      const rl = createInterface({ input, output });
+      try {
+        const answer = await rl.question('¿Configurar path personalizado? [s/n] (Enter = no): ');
+        shouldPrompt = answer.trim().toLowerCase() === 's';
+      } finally {
+        rl.close();
+      }
+    }
+    
+    if (shouldPrompt) {
       const workspacePath = await promptForWorkspacePath();
       updateWorkspacePathInEnv(repoRoot, workspacePath);
       console.error(`[setup] WORKSPACE_PATH guardado en .env: ${workspacePath === '' ? '<repo>/workspace (default)' : workspacePath}`);
+      
+      // Reload env so process.env.WORKSPACE_PATH reflects the new value
+      loadRepoEnv(repoRoot);
     }
   }
 
