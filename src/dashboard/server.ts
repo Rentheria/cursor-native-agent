@@ -199,6 +199,32 @@ export async function handleRequest(
     return;
   }
 
+  if (pathname === '/api/confirm') {
+    if (!chatEnabled) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        message: 'Confirm is only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (!isTokenValid(req, requiredToken)) {
+      sendJson(res, 401, {
+        error: 'unauthorized',
+        message: 'Missing or invalid dashboard token. Provide X-Dashboard-Token or Authorization: Bearer header.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (method !== 'POST') {
+      sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'Use POST /api/confirm with JSON body { "action": "ok"|"no" }.',
+      }, false, chatEnabled);
+      return;
+    }
+    await handleConfirmPost(req, res, options, rateLimitMap, server);
+    return;
+  }
+
   if (pathname === '/api/threads') {
     if (!chatEnabled) {
       sendJson(res, 404, {
@@ -346,6 +372,128 @@ export async function handleRequest(
     const message = error instanceof Error ? error.message : String(error);
     sendJson(res, 500, { error: 'internal_error', message }, false, chatEnabled);
   }
+}
+
+async function handleConfirmPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: DashboardServerOptions,
+  rateLimitMap: Map<string, RateLimitEntry>,
+  server: Server,
+): Promise<void> {
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null
+    ? address.port
+    : (options.listenPort ?? resolveDashboardPort());
+  if (!isOriginAllowed(req, port)) {
+    sendJson(res, 403, {
+      error: 'forbidden',
+      message: 'Cross-origin requests are not allowed.',
+    });
+    return;
+  }
+
+  const clientIp = req.socket.remoteAddress ?? 'unknown';
+  if (!checkRateLimit(clientIp, rateLimitMap)) {
+    sendJson(res, 429, {
+      error: 'rate_limit_exceeded',
+      message: `Rate limit exceeded. Maximum ${RATE_LIMIT_MAX_REQUESTS} requests per minute.`,
+    });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, 400, { error: 'invalid_json', message });
+    return;
+  }
+
+  const action = extractConfirmAction(body);
+  if (action === undefined) {
+    sendJson(res, 400, {
+      error: 'invalid_action',
+      message: 'Expected JSON body { "action": "ok" | "no" }.',
+    });
+    return;
+  }
+
+  if (action === 'ok') {
+    const pendingPrompt = consumePendingDashboardForce();
+    if (pendingPrompt === undefined) {
+      beginSse(res);
+      writeSseEvent(res, {
+        type: 'error',
+        message: 'No hay confirmación pendiente (puede haber expirado). Enviá tu solicitud nuevamente.',
+      });
+      res.end();
+      return;
+    }
+
+    const runChat = options.runChatTurn ?? defaultChatTurnRunner;
+    beginSse(res);
+
+    chatInFlight = true;
+    try {
+      const result = await runChat({
+        repoRoot: options.repoRoot,
+        userPrompt: pendingPrompt,
+        confirmedForce: true,
+        onAssistantDelta: withoutSegmentRecaps((text) => {
+          writeSseEvent(res, { type: 'delta', text });
+        }),
+      });
+      
+      if (result.exitCode !== 0 || result.reply.trim() === '') {
+        const stderrSnippet = result.stderr.trim().split('\n').slice(-3).join('\n');
+        const message = result.exitCode !== 0
+          ? `cursor-agent exited with code ${result.exitCode}${stderrSnippet ? `: ${stderrSnippet}` : ''}`
+          : 'cursor-agent returned an empty reply';
+        writeSseEvent(res, { type: 'error', message });
+        res.end();
+        return;
+      }
+      
+      const markdown = renderMarkdown(result.reply);
+      writeSseEvent(res, {
+        type: 'done',
+        reply: result.reply,
+        markdown,
+        exitCode: result.exitCode,
+        ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
+      });
+      res.end();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      writeSseEvent(res, { type: 'error', message });
+      res.end();
+    } finally {
+      chatInFlight = false;
+    }
+    return;
+  }
+
+  if (action === 'no') {
+    cancelPendingDashboardForce();
+    beginSse(res);
+    const cancelMessage = 'Confirmación cancelada. Podés enviar una nueva solicitud.';
+    const markdown = renderMarkdown(cancelMessage);
+    writeSseEvent(res, {
+      type: 'done',
+      reply: cancelMessage,
+      markdown,
+      exitCode: 0,
+    });
+    res.end();
+    return;
+  }
+
+  sendJson(res, 400, {
+    error: 'invalid_action',
+    message: 'Action must be "ok" or "no".',
+  });
 }
 
 async function handleMarkdownPost(
@@ -546,6 +694,7 @@ async function handleChatPost(
       reply: result.reply,
       markdown,
       exitCode: result.exitCode,
+      ...(result.requiresForceConfirmation === true ? { requiresForceConfirmation: true } : {}),
       ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
     });
     res.end();
@@ -623,6 +772,17 @@ function extractThreadId(body: unknown): string | undefined {
   const threadId = (body as Record<string, unknown>)['threadId'];
   if (typeof threadId === 'string' && threadId.trim() !== '') {
     return threadId;
+  }
+  return undefined;
+}
+
+function extractConfirmAction(body: unknown): 'ok' | 'no' | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const action = (body as Record<string, unknown>)['action'];
+  if (action === 'ok' || action === 'no') {
+    return action;
   }
   return undefined;
 }

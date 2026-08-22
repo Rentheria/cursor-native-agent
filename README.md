@@ -513,6 +513,10 @@ Servidor HTTP local mínimo (`node:http`, sin frameworks nuevos) para **observar
 el agente. Incluye **chat interactivo habilitado por defecto** para localhost;
 desactívalo con `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para modo solo lectura.
 
+El chat pide confirmación antes de escribir cambios; los botones **Confirmar** y
+**Cancelar** aparecen en el dashboard y Telegram (inline keyboard) cuando se necesita
+`--force`. El token está en `.env` como `DASHBOARD_TOKEN` (después de `npm run setup`).
+
 ```bash
 npm run dashboard
 # http://127.0.0.1:3847/  (chat habilitado por defecto)

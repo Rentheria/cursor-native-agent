@@ -22,6 +22,7 @@ import {
   createTelegramApi,
   requireTelegramBotToken,
   type TelegramApi,
+  type InlineKeyboardMarkup,
 } from './telegram-api.js';
 import {
   describeAllowlist,
@@ -246,13 +247,6 @@ export async function dispatchInboundMessage(params: {
     await liveReply.finish(`Error running agent: ${message}`);
     return;
   }
-  
-  // If the result requires force confirmation, store the pending prompt
-  if (result.requiresForceConfirmation === true) {
-    setPendingTelegramForce(inbound.chatId, inbound.text);
-    console.error(`[telegram] Stored pending build confirmation for chat=${String(inbound.chatId)}`);
-  }
-
   if (result.stderr.trim() !== '') {
     console.error(result.stderr.trimEnd());
   }
@@ -266,11 +260,155 @@ export async function dispatchInboundMessage(params: {
     result.reply.trim() !== ''
       ? result.reply
       : `(agent produced empty reply; exit=${String(result.exitCode)})`;
+  
+  // If the result requires force confirmation, store the pending prompt
+  if (result.requiresForceConfirmation === true) {
+    setPendingTelegramForce(inbound.chatId, inbound.text);
+    console.error(`[telegram] Stored pending build confirmation for chat=${String(inbound.chatId)}`);
+    
+    const keyboard: InlineKeyboardMarkup = {
+      inline_keyboard: [
+        [
+          { text: 'Confirmar', callback_data: 'confirm_ok' },
+          { text: 'Cancelar', callback_data: 'confirm_no' },
+        ],
+      ],
+    };
+    
+    await api.sendMessage({
+      chatId: inbound.chatId,
+      text: reply + '\n\n¿Confirmar?',
+      reply_markup: keyboard,
+    });
+    console.error(
+      `[telegram] Sent confirmation keyboard to chat=${String(inbound.chatId)}`,
+    );
+    return;
+  }
 
   await liveReply.finish(reply);
   console.error(
     `[telegram] Replied to chat=${String(inbound.chatId)} (${String(reply.length)} chars)`,
   );
+}
+
+/**
+ * Handles inline keyboard button presses (callback queries).
+ */
+async function handleCallbackQuery(
+  callbackQuery: import('./telegram-api.js').CallbackQuery,
+  api: TelegramApi,
+  allowlist: TelegramAllowlist,
+  processInbound: ProcessInboundFn,
+): Promise<void> {
+  const chatId = callbackQuery.message?.chat.id;
+  const fromUserId = callbackQuery.from.id;
+  const data = callbackQuery.data;
+  
+  if (chatId === undefined || data === undefined) {
+    await api.answerCallbackQuery({ callbackQueryId: callbackQuery.id });
+    return;
+  }
+  
+  const inbound: InboundTelegramText = {
+    updateId: 0,
+    messageId: callbackQuery.message?.message_id ?? 0,
+    chatId,
+    text: '',
+    fromUserId,
+    fromUsername: callbackQuery.from.username,
+  };
+  
+  if (!isInboundAllowed(inbound, allowlist)) {
+    console.error(
+      `[telegram] Ignored callback from ${describeInboundSender(inbound)} (not in allowlist)`,
+    );
+    await api.answerCallbackQuery({ callbackQueryId: callbackQuery.id });
+    return;
+  }
+  
+  const who = callbackQuery.from.username ?? String(fromUserId);
+  
+  if (data === 'confirm_ok') {
+    const pendingPrompt = consumePendingTelegramForce(chatId);
+    if (pendingPrompt === undefined) {
+      console.error(
+        `[telegram] confirm_ok from ${who} chat=${String(chatId)} but no pending confirmation`,
+      );
+      await api.answerCallbackQuery({
+        callbackQueryId: callbackQuery.id,
+        text: 'No hay confirmación pendiente',
+      });
+      return;
+    }
+    
+    await api.answerCallbackQuery({
+      callbackQueryId: callbackQuery.id,
+      text: 'Ejecutando…',
+    });
+    
+    console.error(
+      `[telegram] Confirmed build from ${who} chat=${String(chatId)}: ${truncate(pendingPrompt, 80)}`,
+    );
+    
+    const liveReply = createTelegramLiveReply({ api, chatId });
+    const workspacePath = resolveTelegramWorkspace(allowlist.repoRoot ?? '', chatId);
+    
+    let result: AgentTurnResult;
+    try {
+      result = await processInbound(
+        { ...inbound, text: pendingPrompt },
+        withoutSegmentRecaps((text) => {
+          liveReply.pushDelta(text);
+        }),
+        true,
+        workspacePath,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[telegram] Agent turn failed: ${message}`);
+      await liveReply.finish(`Error running agent: ${message}`);
+      return;
+    }
+    
+    if (result.stderr.trim() !== '') {
+      console.error(result.stderr.trimEnd());
+    }
+    if (result.exitCode !== 0) {
+      console.error(
+        `[telegram] cursor-agent exited with code ${String(result.exitCode)}`,
+      );
+    }
+    
+    const reply =
+      result.reply.trim() !== ''
+        ? result.reply
+        : `(agent produced empty reply; exit=${String(result.exitCode)})`;
+    
+    await liveReply.finish(reply);
+    console.error(
+      `[telegram] Replied to chat=${String(chatId)} (${String(reply.length)} chars)`,
+    );
+    return;
+  }
+  
+  if (data === 'confirm_no') {
+    cancelPendingTelegramForce(chatId);
+    console.error(
+      `[telegram] Cancelled pending build from ${who} chat=${String(chatId)}`,
+    );
+    await api.answerCallbackQuery({
+      callbackQueryId: callbackQuery.id,
+      text: 'Cancelado',
+    });
+    await api.sendMessage({
+      chatId,
+      text: 'Confirmación cancelada. Podés enviar una nueva solicitud.',
+    });
+    return;
+  }
+  
+  await api.answerCallbackQuery({ callbackQueryId: callbackQuery.id });
 }
 
 /**
@@ -325,6 +463,17 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
     }
 
     offset = nextUpdateOffset(updates, offset);
+    
+    // Handle callback queries (inline keyboard button presses)
+    for (const update of updates) {
+      if (isAborted(options.signal)) {
+        break;
+      }
+      if (update.callback_query !== undefined) {
+        await handleCallbackQuery(update.callback_query, options.api, options.allowlist, processInbound);
+      }
+    }
+    
     const inbound = extractInboundTextMessages(updates);
     for (const message of inbound) {
       if (isAborted(options.signal)) {
