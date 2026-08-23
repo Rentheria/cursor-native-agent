@@ -103,8 +103,6 @@ Telegram (usuario) → getUpdates (long poll)
 - **HTTPS/TLS** — dashboard solo escucha en `127.0.0.1`; no está diseñado para
   exposición pública.
 - **Backups automáticos** — no hay snapshot automático de `MEMORY.md` + `memory/` + logs.
-- **Windows Task Scheduler** — `cron:install` requiere Unix crontab; en Windows
-  usar WSL o implementar alternativa con Task Scheduler (no implementado).
 - **Provider de embeddings cloud** — punto de extensión documentado
   (`EMBEDDINGS_PROVIDER=custom` + módulo), pero no hay implementación de
   OpenAI/Cohere/etc incluida (solo TF-IDF local).
