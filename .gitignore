@@ -13,6 +13,8 @@ workspace/
 threads/
 # Telegram poller lock
 .telegram-poller.lock
+# Dashboard uploads (local attach folder)
+.attachments/
 .env
 .env.*
 !.env.example
