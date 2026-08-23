@@ -5,6 +5,12 @@ import path from 'node:path';
 export const THREADS_DIR_NAME = 'threads';
 export const MAX_MESSAGES_PER_THREAD = 50;
 export const MAX_THREAD_CONTEXT_CHARS = 14000;
+/**
+ * Soft cap per individual message content. Messages longer than this
+ * will be truncated with a clear marker to prevent one huge message
+ * from consuming the entire thread context budget.
+ */
+export const MAX_SINGLE_MESSAGE_CHARS = 4000;
 
 export type ThreadMessage = {
   readonly role: 'user' | 'assistant';
@@ -263,8 +269,14 @@ export async function deleteThread(
 
 /**
  * Builds context string from recent thread messages (last N exchanges).
- * Also caps total character length to MAX_THREAD_CONTEXT_CHARS.
+ * Caps total character length to MAX_THREAD_CONTEXT_CHARS, preferring newest messages.
  * Returns empty string if thread not found or has no messages.
+ * 
+ * Strategy:
+ * - Fill budget from newest→oldest (prefer recent context)
+ * - Try to keep complete user+assistant pairs
+ * - Truncate individual huge messages with …[truncado] marker
+ * - Emit final output in chronological order (oldest→newest)
  */
 export async function buildThreadContext(
   repoRoot: string,
@@ -280,22 +292,97 @@ export async function buildThreadContext(
   const recentMessages = thread.messages.slice(-(lastNExchanges * 2));
   
   const header = '## Contexto de conversación reciente\n';
-  const lines: string[] = [header];
-  let currentLength = header.length;
+  let budget = MAX_THREAD_CONTEXT_CHARS - header.length;
   
-  // Add messages from newest to oldest, respecting char limit
-  for (const msg of recentMessages) {
-    const role = msg.role === 'user' ? 'Usuario' : 'Asistente';
-    const line = `**${role}:** ${msg.content}\n\n`;
-    const lineLength = line.length;
+  // Build list of messages to include, working newest→oldest
+  // Strategy: prefer complete pairs, but allow the newest message to be orphaned
+  const included: Array<{ role: string; content: string }> = [];
+  let isFirstMessage = true;
+  
+  for (let i = recentMessages.length - 1; i >= 0; i--) {
+    const msg = recentMessages[i];
+    if (msg === undefined) continue;
     
-    // Check if adding this message would exceed the char limit
-    if (currentLength + lineLength > MAX_THREAD_CONTEXT_CHARS) {
+    const role = msg.role === 'user' ? 'Usuario' : 'Asistente';
+    let content = msg.content;
+    
+    // Truncate huge messages to avoid consuming entire budget
+    if (content.length > MAX_SINGLE_MESSAGE_CHARS) {
+      content = content.slice(0, MAX_SINGLE_MESSAGE_CHARS) + '…[truncado]';
+    }
+    
+    // Format as it will appear in output
+    const formatted = `**${role}:** ${content}\n\n`;
+    const needed = formatted.length;
+    
+    // If this message doesn't fit at all, stop including more
+    if (needed > budget) {
+      // If this is the very first message, try truncating it further
+      // so we include at least something
+      if (isFirstMessage && content.length > 100) {
+        const truncated = content.slice(0, 100) + '…[truncado]';
+        const fallbackFormatted = `**${role}:** ${truncated}\n\n`;
+        if (fallbackFormatted.length <= budget) {
+          included.push({ role, content: truncated });
+          budget -= fallbackFormatted.length;
+        }
+      }
+      // Stop trying to include older messages
       break;
     }
     
-    lines.push(line);
-    currentLength += lineLength;
+    // Try to keep complete exchanges: check if the previous message (older) forms a pair
+    const prevMsg = recentMessages[i - 1];
+    let canIncludeAsPair = false;
+    let prevRole = '';
+    let prevContent = '';
+    let prevNeeded = 0;
+    
+    if (prevMsg !== undefined && i > 0) {
+      prevRole = prevMsg.role === 'user' ? 'Usuario' : 'Asistente';
+      prevContent = prevMsg.content;
+      
+      // Truncate if needed
+      if (prevContent.length > MAX_SINGLE_MESSAGE_CHARS) {
+        prevContent = prevContent.slice(0, MAX_SINGLE_MESSAGE_CHARS) + '…[truncado]';
+      }
+      
+      const prevFormatted = `**${prevRole}:** ${prevContent}\n\n`;
+      prevNeeded = prevFormatted.length;
+      
+      // Check if this forms a valid pair and both fit
+      if (((msg.role === 'assistant' && prevMsg.role === 'user') ||
+           (msg.role === 'user' && prevMsg.role === 'assistant')) &&
+          needed + prevNeeded <= budget) {
+        canIncludeAsPair = true;
+      }
+    }
+    
+    if (canIncludeAsPair) {
+      // Include both messages as a pair
+      included.push({ role, content });
+      included.push({ role: prevRole, content: prevContent });
+      budget -= (needed + prevNeeded);
+      i--; // Skip the message we just included as part of the pair
+      isFirstMessage = false;
+    } else if (isFirstMessage) {
+      // For the very first (newest) message, allow it to be orphaned
+      included.push({ role, content });
+      budget -= needed;
+      isFirstMessage = false;
+    } else {
+      // For older messages, if we can't include as a complete pair, stop
+      break;
+    }
+  }
+  
+  // Reverse to get chronological order (oldest→newest)
+  included.reverse();
+  
+  // Build final string
+  const lines: string[] = [header];
+  for (const { role, content } of included) {
+    lines.push(`**${role}:** ${content}\n\n`);
   }
   
   return lines.join('\n');

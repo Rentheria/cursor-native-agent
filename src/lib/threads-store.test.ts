@@ -14,6 +14,7 @@ import {
   getThreadsDir,
   MAX_MESSAGES_PER_THREAD,
   MAX_THREAD_CONTEXT_CHARS,
+  MAX_SINGLE_MESSAGE_CHARS,
   type Thread,
 } from './threads-store.js';
 
@@ -431,6 +432,130 @@ describe('buildThreadContext con límite de caracteres', () => {
       
       // Debe incluir el mensaje más reciente
       assert.ok(context.includes('Mensaje 20'));
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('prefiere mensajes más recientes cuando excede el presupuesto', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Crear muchos mensajes con contenido grande que exceda el presupuesto total
+      // Cada mensaje con MAX_SINGLE_MESSAGE_CHARS será truncado a ~4014 chars
+      // 4 mensajes * 4014 chars = ~16056 chars, que excede MAX_THREAD_CONTEXT_CHARS (14000)
+      const largeContent = 'Y'.repeat(MAX_SINGLE_MESSAGE_CHARS);
+      const thread = await createThread(repoRoot, `ANTIGUO1: ${largeContent}`);
+      await appendToThread(repoRoot, thread.id, 'assistant', `ANTIGUO2: ${largeContent}`);
+      await appendToThread(repoRoot, thread.id, 'user', `MEDIO1: ${largeContent}`);
+      await appendToThread(repoRoot, thread.id, 'assistant', `MEDIO2: ${largeContent}`);
+      await appendToThread(repoRoot, thread.id, 'user', 'Mensaje reciente (debe estar)');
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Respuesta reciente (debe estar)');
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 10);
+      
+      // El contexto debe respetar el límite
+      assert.ok(context.length <= MAX_THREAD_CONTEXT_CHARS);
+      
+      // Debe incluir los mensajes más recientes
+      assert.ok(context.includes('Mensaje reciente (debe estar)'));
+      assert.ok(context.includes('Respuesta reciente (debe estar)'));
+      
+      // Los mensajes más antiguos deben haberse descartado
+      assert.ok(!context.includes('ANTIGUO1'));
+      assert.ok(!context.includes('ANTIGUO2'));
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('trunca mensajes individuales enormes con marcador [truncado]', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Crear un mensaje que exceda MAX_SINGLE_MESSAGE_CHARS
+      const hugeContent = 'H'.repeat(MAX_SINGLE_MESSAGE_CHARS + 1000);
+      const thread = await createThread(repoRoot, hugeContent);
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Respuesta corta después del enorme');
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 10);
+      
+      // El contexto debe respetar el límite global
+      assert.ok(context.length <= MAX_THREAD_CONTEXT_CHARS);
+      
+      // Debe incluir el marcador de truncado
+      assert.ok(context.includes('…[truncado]'));
+      
+      // Debe incluir la respuesta posterior (no consumida por el mensaje enorme)
+      assert.ok(context.includes('Respuesta corta después del enorme'));
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('intenta mantener intercambios completos (user+assistant)', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Crear pares de mensajes
+      const thread = await createThread(repoRoot, 'Pregunta 1');
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Respuesta 1');
+      await appendToThread(repoRoot, thread.id, 'user', 'Pregunta 2');
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Respuesta 2');
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 5);
+      
+      // Debe incluir ambos pares completos
+      const hasPregunta1 = context.includes('Pregunta 1');
+      const hasRespuesta1 = context.includes('Respuesta 1');
+      const hasPregunta2 = context.includes('Pregunta 2');
+      const hasRespuesta2 = context.includes('Respuesta 2');
+      
+      // Si incluye una pregunta, debe incluir su respuesta (y viceversa)
+      if (hasPregunta1 || hasRespuesta1) {
+        assert.ok(hasPregunta1 && hasRespuesta1, 'Par 1 debe estar completo');
+      }
+      if (hasPregunta2 || hasRespuesta2) {
+        assert.ok(hasPregunta2 && hasRespuesta2, 'Par 2 debe estar completo');
+      }
+      
+      // El par más reciente debe estar incluido
+      assert.ok(hasPregunta2 && hasRespuesta2);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('contexto vacío si thread no existe o está vacío', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      // Thread inexistente
+      const context1 = await buildThreadContext(repoRoot, 'no-existe');
+      assert.equal(context1, '');
+      
+      // Thread vacío
+      const { createOrResetThread } = await import('./threads-store.js');
+      const emptyThread = await createOrResetThread(repoRoot, 'vacio');
+      const context2 = await buildThreadContext(repoRoot, emptyThread.id);
+      assert.equal(context2, '');
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('orden cronológico (oldest→newest) en salida final', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Primero');
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Segundo');
+      await appendToThread(repoRoot, thread.id, 'user', 'Tercero');
+      await appendToThread(repoRoot, thread.id, 'assistant', 'Cuarto');
+      
+      const context = await buildThreadContext(repoRoot, thread.id, 5);
+      
+      // Verificar orden: Primero debe aparecer antes que Cuarto
+      const idxPrimero = context.indexOf('Primero');
+      const idxCuarto = context.indexOf('Cuarto');
+      
+      assert.ok(idxPrimero !== -1 && idxCuarto !== -1);
+      assert.ok(idxPrimero < idxCuarto, 'Orden debe ser cronológico');
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }
