@@ -659,6 +659,7 @@ mismo `runAgentTurn` que `npm run agent` / Telegram, con streaming
 **Adjuntar archivos:** El dashboard ahora soporta adjuntar archivos mediante:
 - **Clic en 📎**: Abre selector de archivos (soporte múltiple)
 - **Drag-and-drop**: Arrastrá archivos al área de chat
+- **Ctrl/Cmd+V**: Pegá imágenes directamente desde el portapapeles (p. ej. screenshots)
 - **@ Mentions**: Todavía podés usar `@path/to/file` en el mensaje para power users
 
 Los archivos se suben vía JSON base64 a `/api/attachments`, se guardan localmente en `.attachments/` (gitignored), y el agente los analiza por path (mismo análisis local que con `npm run agent --attach`). Límite de 10MB por archivo.
