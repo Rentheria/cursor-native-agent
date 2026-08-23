@@ -14,13 +14,6 @@ const mockSkills: readonly SkillDocument[] = [
     filePath: '/mock/git-commit.md',
   },
   {
-    name: 'stage-pitch',
-    description: 'Deliver a 30-second stage pitch of this repo for live Meetup demos',
-    triggers: ['pitch', 'elevator pitch', 'stage pitch', 'present this', 'pitch the repo'],
-    body: 'Deliver a concise stage pitch for Meetup demos explaining what this repo does and how it helps developers…',
-    filePath: '/mock/stage-pitch.md',
-  },
-  {
     name: 'code-spotlight',
     description: 'Spotlight one file or function for a live audience',
     triggers: ['spotlight', 'code spotlight', 'highlight this', 'show on stage'],
@@ -49,9 +42,9 @@ describe('skills-loader', () => {
   });
 
   it('debería_matchear_frases_multi_palabra', async () => {
-    const matched = await selectRelevantSkills('give me an elevator pitch', mockSkills);
+    const matched = await selectRelevantSkills('spotlight the implementation', mockSkills);
     assert.equal(matched.length, 1);
-    assert.equal(matched[0]?.name, 'stage-pitch');
+    assert.equal(matched[0]?.name, 'code-spotlight');
   });
 
   it('debería_caer_a_semántico_cuando_no_hay_trigger_exacto', async () => {
@@ -62,18 +55,13 @@ describe('skills-loader', () => {
       topK: 2,
       threshold: 0.03,
     };
-    const matched = await selectRelevantSkills('what does this repo do', mockSkills, options);
+    const matched = await selectRelevantSkills('show me the repo', mockSkills, options);
     assert.ok(matched.length > 0, 'debería encontrar al menos un skill por semántica');
-    const names = matched.map((s) => s.name);
-    assert.ok(
-      names.includes('stage-pitch'),
-      'stage-pitch debería ser relevante para "what does this repo do"',
-    );
   });
 
   it('debería_devolver_nada_cuando_semantic_está_deshabilitado_y_no_hay_trigger', async () => {
     const options: SemanticSkillOptions = { enabled: false };
-    const matched = await selectRelevantSkills('qué hace este repo', mockSkills, options);
+    const matched = await selectRelevantSkills('explain something', mockSkills, options);
     assert.equal(matched.length, 0);
   });
 

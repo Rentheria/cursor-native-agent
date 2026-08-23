@@ -3,7 +3,6 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { isBuildIntent } from './build-intent.js';
-import { getCannedPitch } from './canned-pitch.js';
 import { runCursorAgent, type CursorAgentRunResult } from './cursor-agent.js';
 import {
   buildTurnDebugReport,
@@ -247,44 +246,6 @@ export async function runAgentTurn(
         matchedSkills.map((skill) => skill.name).join(', ') || '(none)'
       }`,
     );
-
-    const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
-    if (hasStagePitch) {
-      console.error('[agent] stage-pitch matched: returning canned pitch (no model call)');
-      const cannedReply = getCannedPitch(userPrompt);
-      
-      // Persist to thread if applicable
-      if (effectiveThreadId !== undefined) {
-        await appendToThread(repoRoot, effectiveThreadId, 'assistant', cannedReply);
-      }
-      
-      const cannedResult: AgentTurnResult = {
-        reply: cannedReply,
-        stderr: '',
-        exitCode: 0,
-        ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
-      };
-      
-      const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
-      const report = buildTurnDebugReport({
-        prompt: userPrompt,
-        allSkills: skills,
-        matchedSkills,
-        memory,
-      });
-      if (debug) {
-        printTurnDebug(report);
-      }
-      await appendAgentNdjson(repoRoot, {
-        ...report,
-        cursorAgentMs: 0,
-        totalMs: Math.round(performance.now() - totalStart),
-        reply: cannedResult.reply,
-        exitCode: 0,
-      });
-      
-      return cannedResult;
-    }
 
     const hasGitCommit = matchedSkills.some((skill) => skill.name === 'git-commit');
     if (hasGitCommit && !existsSync(path.join(repoRoot, '.git'))) {
