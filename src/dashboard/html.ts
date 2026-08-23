@@ -255,10 +255,8 @@ ${memoryItems}
       }
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
+${fontFaces()}
 ${sharedStyles()}
 ${chatEnabled ? chatStyles() : observeStyles()}
   </style>
@@ -372,6 +370,46 @@ function renderChatShell(options: {
 ${chatClientScript()}
   </script>
 </body>`;
+}
+
+function fontFaces(): string {
+  return `
+    @font-face {
+      font-family: "IBM Plex Sans";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(/fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Sans";
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url(/fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Sans";
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url(/fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Mono";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(/fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Mono";
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url(/fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2");
+    }
+  `;
 }
 
 function sharedStyles(): string {
@@ -1298,7 +1336,7 @@ function chatClientScript(): string {
     
     var btn = document.createElement('button');
     btn.textContent = 'Desbloquear';
-    btn.style.cssText = 'width:100%;padding:0.65rem;font:inherit;font-weight:600;border:none;border-radius:0.6rem;background:var(--accent);color:#fff;cursor:pointer;';
+    btn.style.cssText = 'width:100%;padding:0.65rem;font:inherit;font-weight:600;border:none;border-radius:0.6rem;background:var(--accent);color:var(--button-text);cursor:pointer;';
     
     var error = document.createElement('p');
     error.style.cssText = 'margin:0.75rem 0 0;color:var(--error-text);font-size:0.85rem;display:none;';
