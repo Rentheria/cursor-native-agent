@@ -199,6 +199,7 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
     <section class="panel" aria-labelledby="agent-heading">
       <h2 id="agent-heading">Turnos del agente</h2>
       <p class="source">${escapeHtml(snapshot.sources.agentPath)} · más recientes ${String(snapshot.agentTurns.length)}</p>
+      <p class="panel-hint">Historial de ejecuciones del agente. Haz clic para ver detalles (Ctrl/Cmd+clic para expandir).</p>
       ${
         snapshot.agentTurns.length === 0
           ? '<p class="empty">Sin turnos todavía. Envía un mensaje en el chat o ejecuta <span class="mono">npm run agent -- "tu prompt"</span>.</p>'

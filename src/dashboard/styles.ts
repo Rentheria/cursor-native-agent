@@ -155,6 +155,12 @@ export function sharedStyles(): string {
       color: var(--accent);
       font-weight: 600;
     }
+    .panel-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0 0 0.75rem;
+      line-height: 1.4;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -576,6 +582,9 @@ export function chatStyles(): string {
       color: var(--ink);
       box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 6%, transparent);
     }
+    .side-tab:first-child {
+      grid-column: 1 / 2;
+    }
     .sidebar-panels {
       flex: 1;
       min-height: 0;
@@ -839,6 +848,24 @@ export function chatStyles(): string {
       border-color: var(--accent);
       color: var(--accent);
     }
+    .button-new-thread {
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 0.45rem 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 0.65rem;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 120ms ease;
+    }
+    .button-new-thread:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
     .thread-list {
       display: grid;
       gap: 0.35rem;
@@ -919,6 +946,27 @@ export function chatStyles(): string {
       background: var(--danger-soft);
       border-color: #c53030;
       color: #c53030;
+    }
+    .thread-actions {
+      display: flex;
+      gap: 0.25rem;
+    }
+    .thread-rename-btn {
+      padding: 0.25rem 0.4rem;
+      border: 1px solid var(--line);
+      border-radius: 0.45rem;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      transition: all 120ms ease;
+      flex-shrink: 0;
+    }
+    .thread-rename-btn:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
     }
     @keyframes blink {
       50% { opacity: 0; }
