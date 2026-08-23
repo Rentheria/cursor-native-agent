@@ -537,6 +537,45 @@ export async function handleRequest(
       }
     }
 
+    if (pathname.startsWith('/static/')) {
+      const staticFileName = pathname.slice('/static/'.length);
+      if (!/^[a-z0-9-]+\.(png|svg)$/.test(staticFileName)) {
+        sendJson(res, 400, {
+          error: 'invalid_file',
+          message: 'Invalid static file name',
+        }, false, chatEnabled);
+        return;
+      }
+      
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const staticPath = path.join(__dirname, 'static', staticFileName);
+      
+      try {
+        const fileData = await readFile(staticPath);
+        res.statusCode = 200;
+        const contentType = staticFileName.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        if (method === 'HEAD') {
+          res.setHeader('Content-Length', fileData.length);
+          res.end();
+        } else {
+          res.end(fileData);
+        }
+        return;
+      } catch (error: unknown) {
+        if (isEnoent(error)) {
+          sendJson(res, 404, {
+            error: 'not_found',
+            message: 'Static file not found',
+          }, false, chatEnabled);
+        } else {
+          throw error;
+        }
+        return;
+      }
+    }
+
     if (pathname === '/api/agent') {
       const snapshot = await loadDashboardSnapshot(options);
       sendJson(res, 200, { turns: snapshot.agentTurns }, method === 'HEAD', chatEnabled);
