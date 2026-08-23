@@ -12,6 +12,8 @@ import {
 } from '../lib/threads-store.js';
 import { loadAllSkills } from '../loaders/skills-loader.js';
 import { parseSlashCommand, buildHelpMessage } from '../lib/mentions/index.js';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 
 export interface ReplOptions {
   readonly debug?: boolean;
@@ -62,21 +64,26 @@ async function printThreads(repoRoot: string): Promise<void> {
  * - /help — Show available commands and skills
  * - /clear — Clear current thread history
  * - /threads — List all threads
+ * - /attach <path> — Add file(s) to session attachments
+ * - /detach — Clear session attachments
  * - exit, .exit, /exit — Quit REPL
  * 
- * Attachments: Initial attachments from --attach flags are passed to every turn.
- * Mid-session /attach is not yet implemented (tracked as future enhancement).
+ * Attachments: Initial attachments from --attach flags + any /attach commands
+ * are passed to every subsequent turn.
  */
 export async function runRepl(
   repoRoot: string,
   options: ReplOptions = {},
 ): Promise<void> {
   const debug = options.debug === true;
-  const initialAttachments = options.attachments ?? [];
+  const sessionAttachments: string[] = [...(options.attachments ?? [])];
 
   console.error('[agent] Starting interactive mode...');
   console.error(`[agent] Thread: ${CLI_THREAD_ID} (persists across sessions)`);
   console.error('[agent] Type /help for commands, exit to quit');
+  if (sessionAttachments.length > 0) {
+    console.error(`[agent] Initial attachments: ${sessionAttachments.join(', ')}`);
+  }
 
   const rl = createInterface({ input, output });
 
@@ -117,6 +124,18 @@ export async function runRepl(
           await printThreads(repoRoot);
           continue;
         }
+
+        if (slashCommand.command === 'attach') {
+          const result = handleAttachCommand(slashCommand.args, repoRoot, sessionAttachments);
+          console.error(result.message);
+          continue;
+        }
+
+        if (slashCommand.command === 'detach') {
+          sessionAttachments.length = 0;
+          console.error('[agent] Session attachments cleared / Adjuntos de sesión limpiados');
+          continue;
+        }
       }
 
       // Not a local command, pass to agent via runAgentTurn
@@ -128,7 +147,7 @@ export async function runRepl(
           debug,
           threadId: CLI_THREAD_ID,
           stream: true,
-          ...(initialAttachments.length > 0 ? { attachments: initialAttachments } : {}),
+          ...(sessionAttachments.length > 0 ? { attachments: sessionAttachments } : {}),
           onAssistantDelta: withoutSegmentRecaps((text) => {
             liveReply.pushDelta(text);
           }),
@@ -143,6 +162,58 @@ export async function runRepl(
   } finally {
     rl.close();
   }
+}
+
+/**
+ * Handles /attach command: validates and adds path(s) to session attachments.
+ * Resolves paths relative to process.cwd() (like CLI one-shot mode).
+ */
+function handleAttachCommand(
+  args: string,
+  _repoRoot: string,
+  sessionAttachments: string[],
+): { message: string } {
+  const paths = args.trim().split(/\s+/).filter((p) => p !== '');
+  
+  if (paths.length === 0) {
+    return {
+      message: '[agent] /attach requires at least one path / /attach requiere al menos una ruta',
+    };
+  }
+
+  const added: string[] = [];
+  const missing: string[] = [];
+
+  for (const rawPath of paths) {
+    const resolved = path.isAbsolute(rawPath)
+      ? rawPath
+      : path.resolve(process.cwd(), rawPath);
+
+    if (!existsSync(resolved)) {
+      missing.push(rawPath);
+      continue;
+    }
+
+    if (!sessionAttachments.includes(resolved)) {
+      sessionAttachments.push(resolved);
+      added.push(resolved);
+    }
+  }
+
+  const parts: string[] = [];
+  if (added.length > 0) {
+    parts.push(`[agent] Added ${String(added.length)} file(s) / Añadido ${String(added.length)} archivo(s):`);
+    parts.push(...added.map((p) => `  - ${p}`));
+  }
+  if (missing.length > 0) {
+    parts.push(`[agent] ⚠️  File(s) not found / Archivo(s) no encontrado(s):`);
+    parts.push(...missing.map((p) => `  - ${p}`));
+  }
+  if (added.length === 0 && missing.length === 0) {
+    parts.push('[agent] No new attachments / Sin nuevos adjuntos');
+  }
+
+  return { message: parts.join('\n') };
 }
 
 /**
