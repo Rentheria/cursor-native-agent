@@ -478,6 +478,10 @@ export function chatClientScript(): string {
         var html = '<div class="thread-list">';
         data.threads.forEach(function (t) {
           var active = currentThreadId === t.id ? ' is-active' : '';
+          if (currentThreadId === t.id) {
+            currentThreadTitle = t.title || 'Sin título';
+            updateThreadIndicator();
+          }
           var title = t.title || 'Sin título';
           if (title.length > 50) title = title.slice(0, 47) + '...';
           var msgCount = t.messageCount || 0;

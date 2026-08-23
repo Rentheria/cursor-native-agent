@@ -80,7 +80,7 @@ export function renderChatShell(options: {
         <span class="meta">chat · ${escapeHtml(options.generatedAt)}</span>
       </div>
       <nav class="sidebar-nav" aria-label="Paneles">
-        <button type="button" class="side-tab" data-panel="threads">Hilos</button>
+        <button type="button" class="side-tab is-active" data-panel="threads">Hilos</button>
         <button type="button" class="side-tab" data-panel="agent">Turnos</button>
         <button type="button" class="side-tab" data-panel="cron">Cron</button>
         <button type="button" class="side-tab" data-panel="memory">Memoria</button>
