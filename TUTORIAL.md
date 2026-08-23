@@ -353,6 +353,43 @@ npm run agent -- "delega esto a un sub-agente: lista los nombres de archivos baj
 # → Dispatching worker … / Worker finished exit=0 log=logs/workers/…
 ```
 
+## Modo watch — desarrollo local sin reinicio
+
+Si estás editando el código del agente o las skills/memoria localmente, **evita el
+ciclo de "subir y bajar el proyecto"** corriendo el modo watch:
+
+```bash
+npm run watch:dashboard
+```
+
+Esto arranca el dashboard con hot-reload: cuando editas archivos en `src/`, el
+servidor se reinicia automáticamente. Los cambios en `skills/*.md`, `memory/*.md`
+y `MEMORY.md` se recargan en el siguiente turno del agente **sin reiniciar nada**.
+
+**Archivos monitoreados:**
+
+- `src/**/*.ts` → Reinicia dashboard (si está activo)
+- `skills/**/*.md`, `memory/**/*.md`, `MEMORY.md` → Se recargan en siguiente turno
+- `.env` → Muestra nota (no reinicia automáticamente)
+
+**Workflow típico:**
+
+```bash
+# Terminal 1: watch + dashboard
+npm run watch:dashboard
+
+# Terminal 2: edita una skill
+vim skills/nueva-skill.md
+
+# El watch detecta el cambio y avisa:
+# "✓ skills/nueva-skill.md modificado - se recargará en el siguiente turno"
+
+# Terminal 3: prueba el cambio
+npm run agent -- "usa la nueva skill"
+```
+
+Más detalles: sección "Modo watch" en `README.md`.
+
 ## Casos de fallo reales (y cómo salir)
 
 Solo incidentes verificados en este repo / host / tickets. No inventados.
