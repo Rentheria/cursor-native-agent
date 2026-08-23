@@ -54,6 +54,30 @@ describe('parseSlashCommand', () => {
     assert.equal(result.args, '');
   });
 
+  test('parses built-in attach command', () => {
+    const result = parseSlashCommand('/attach file.txt', mockSkills);
+    assert.ok(result !== undefined);
+    assert.equal(result.command, 'attach');
+    assert.equal(result.isBuiltIn, true);
+    assert.equal(result.args, 'file.txt');
+  });
+
+  test('parses built-in attach command with multiple files', () => {
+    const result = parseSlashCommand('/attach file1.txt file2.txt', mockSkills);
+    assert.ok(result !== undefined);
+    assert.equal(result.command, 'attach');
+    assert.equal(result.isBuiltIn, true);
+    assert.equal(result.args, 'file1.txt file2.txt');
+  });
+
+  test('parses built-in detach command', () => {
+    const result = parseSlashCommand('/detach', mockSkills);
+    assert.ok(result !== undefined);
+    assert.equal(result.command, 'detach');
+    assert.equal(result.isBuiltIn, true);
+    assert.equal(result.args, '');
+  });
+
   test('parses skill command', () => {
     const result = parseSlashCommand('/git-commit fix bug', mockSkills);
     assert.ok(result !== undefined);
@@ -89,6 +113,8 @@ describe('buildHelpMessage', () => {
     assert.ok(help.includes('/help'));
     assert.ok(help.includes('/clear'));
     assert.ok(help.includes('/threads'));
+    assert.ok(help.includes('/attach'));
+    assert.ok(help.includes('/detach'));
   });
 
   test('includes skills', () => {
