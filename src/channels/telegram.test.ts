@@ -840,7 +840,7 @@ describe('Telegram confirmación de build', () => {
     });
 
     // /ok without pending confirmation should show error
-    assert.match(sent[0] ?? '', /No pending build confirmation/);
+    assert.match(sent[0] ?? '', /No hay confirmación pendiente/);
   });
 
   it('debería_manejar_no_cancelando_el_build_pendiente', async () => {
@@ -879,7 +879,7 @@ describe('Telegram confirmación de build', () => {
     });
 
     assert.equal(sent.length, 1);
-    assert.match(sent[0] ?? '', /cancelled/i);
+    assert.match(sent[0] ?? '', /cancelad/i);
   });
 
   it('callback_confirmar_debe_reutilizar_threadId_telegram_chat_id', async () => {
