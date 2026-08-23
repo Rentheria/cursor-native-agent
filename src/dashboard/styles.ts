@@ -56,50 +56,50 @@ export function sharedStyles(): string {
   return `
     :root {
       color-scheme: light;
-      --ink: #2a2420;
-      --muted: #6b6260;
-      --line: #e0d8d0;
-      --panel: #f8f5f0;
-      --paper: #faf8f4;
+      --ink: #141410;
+      --muted: #6b6b66;
+      --line: #e6e5e0;
+      --panel: #f7f5f0;
+      --paper: #f7f5f0;
       --surface: #ffffff;
-      --accent: #f54e00;
-      --accent-soft: #fff3ed;
-      --accent-hover: #d94400;
-      --user-bubble: #f54e00;
-      --user-ink: #ffffff;
+      --accent: #141410;
+      --accent-soft: #e6e5e0;
+      --accent-hover: #2a2a25;
+      --user-bubble: #141410;
+      --user-ink: #f7f5f0;
       --assistant-bubble: #ffffff;
       --warn: #d97706;
       --warn-soft: #fef3c7;
       --danger: #dc2626;
       --danger-soft: #fee2e2;
-      --modal-overlay: rgba(42, 36, 32, 0.7);
-      --modal-shadow: rgba(42, 36, 32, 0.25);
+      --modal-overlay: rgba(20, 20, 16, 0.7);
+      --modal-shadow: rgba(20, 20, 16, 0.25);
       --error-text: #dc2626;
-      --button-text: #ffffff;
+      --button-text: #f7f5f0;
       --mono: "IBM Plex Mono", "ui-monospace", "Cascadia Code", monospace;
       --sans: "IBM Plex Sans", "Segoe UI", sans-serif;
       --sidebar-w: 20rem;
       --radius: 0.85rem;
       --radius-lg: 1.25rem;
-      --shadow-sm: 0 1px 2px 0 rgba(42, 36, 32, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(42, 36, 32, 0.1), 0 2px 4px -1px rgba(42, 36, 32, 0.06);
-      --shadow-lg: 0 10px 15px -3px rgba(42, 36, 32, 0.1), 0 4px 6px -2px rgba(42, 36, 32, 0.05);
-      --shadow-xl: 0 20px 25px -5px rgba(42, 36, 32, 0.1), 0 10px 10px -5px rgba(42, 36, 32, 0.04);
+      --shadow-sm: 0 1px 2px 0 rgba(20, 20, 16, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(20, 20, 16, 0.1), 0 2px 4px -1px rgba(20, 20, 16, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(20, 20, 16, 0.1), 0 4px 6px -2px rgba(20, 20, 16, 0.05);
+      --shadow-xl: 0 20px 25px -5px rgba(20, 20, 16, 0.1), 0 10px 10px -5px rgba(20, 20, 16, 0.04);
     }
     html[data-theme="dark"] {
       color-scheme: dark;
-      --ink: #f5f1ed;
-      --muted: #a39a92;
-      --line: #3a3430;
-      --panel: #1c1815;
-      --paper: #100e0c;
-      --surface: #252220;
-      --accent: #ff6b2b;
-      --accent-soft: #2d1a10;
-      --accent-hover: #ff8555;
-      --user-bubble: #ff6b2b;
-      --user-ink: #100e0c;
-      --assistant-bubble: #252220;
+      --ink: #f7f5f0;
+      --muted: #9a9a92;
+      --line: #2a2a25;
+      --panel: #1a1a18;
+      --paper: #141410;
+      --surface: #1f1f1c;
+      --accent: #f7f5f0;
+      --accent-soft: #2a2a25;
+      --accent-hover: #ffffff;
+      --user-bubble: #f7f5f0;
+      --user-ink: #141410;
+      --assistant-bubble: #1f1f1c;
       --warn: #fbbf24;
       --warn-soft: #3d2f1a;
       --danger: #f87171;
@@ -107,23 +107,23 @@ export function sharedStyles(): string {
       --modal-overlay: rgba(0, 0, 0, 0.8);
       --modal-shadow: rgba(0, 0, 0, 0.7);
       --error-text: #f87171;
-      --button-text: #100e0c;
+      --button-text: #141410;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
         color-scheme: dark;
-        --ink: #f5f1ed;
-        --muted: #a39a92;
-        --line: #3a3430;
-        --panel: #1c1815;
-        --paper: #100e0c;
-        --surface: #252220;
-        --accent: #ff6b2b;
-        --accent-soft: #2d1a10;
-        --accent-hover: #ff8555;
-        --user-bubble: #ff6b2b;
-        --user-ink: #100e0c;
-        --assistant-bubble: #252220;
+        --ink: #f7f5f0;
+        --muted: #9a9a92;
+        --line: #2a2a25;
+        --panel: #1a1a18;
+        --paper: #141410;
+        --surface: #1f1f1c;
+        --accent: #f7f5f0;
+        --accent-soft: #2a2a25;
+        --accent-hover: #ffffff;
+        --user-bubble: #f7f5f0;
+        --user-ink: #141410;
+        --assistant-bubble: #1f1f1c;
         --warn: #fbbf24;
         --warn-soft: #3d2f1a;
         --danger: #f87171;
@@ -131,7 +131,7 @@ export function sharedStyles(): string {
         --modal-overlay: rgba(0, 0, 0, 0.8);
         --modal-shadow: rgba(0, 0, 0, 0.7);
         --error-text: #f87171;
-        --button-text: #100e0c;
+        --button-text: #141410;
       }
     }
     * { box-sizing: border-box; }
@@ -408,8 +408,8 @@ export function observeStyles(): string {
   return `
     body.mode-observe {
       background:
-        radial-gradient(ellipse 80% 50% at 15% -10%, #ffede5 0%, transparent 55%),
-        linear-gradient(180deg, var(--paper) 0%, #fdfcfa 40%, var(--paper) 100%);
+        radial-gradient(ellipse 80% 50% at 15% -10%, #e6e5e0 0%, transparent 55%),
+        linear-gradient(180deg, var(--paper) 0%, #faf9f6 40%, var(--paper) 100%);
       min-height: 100vh;
     }
     header.top {
@@ -586,8 +586,8 @@ export function chatStyles(): string {
     body.mode-chat {
       overflow: hidden;
       background:
-        radial-gradient(ellipse 70% 45% at 20% -8%, #ffede5 0%, transparent 58%),
-        linear-gradient(165deg, var(--paper) 0%, #fdfcfa 45%, var(--paper) 100%);
+        radial-gradient(ellipse 70% 45% at 20% -8%, #e6e5e0 0%, transparent 58%),
+        linear-gradient(165deg, var(--paper) 0%, #faf9f6 45%, var(--paper) 100%);
     }
     .app {
       display: grid;
@@ -674,8 +674,8 @@ export function chatStyles(): string {
       min-width: 0;
       min-height: 0;
       background:
-        radial-gradient(ellipse 65% 35% at 50% -3%, #ffe8de 0%, transparent 65%),
-        linear-gradient(180deg, var(--paper) 0%, #fdfcfa 100%);
+        radial-gradient(ellipse 65% 35% at 50% -3%, #e6e5e0 0%, transparent 65%),
+        linear-gradient(180deg, var(--paper) 0%, #faf9f6 100%);
     }
     .chat-top {
       display: flex;
@@ -718,7 +718,7 @@ export function chatStyles(): string {
       margin: 0;
       padding: 0.65rem 1.4rem;
       border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
-      background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
+      background: color-mix(in srgb, var(--panel) 40%, transparent);
       color: var(--muted);
       font-size: 0.8rem;
       line-height: 1.5;
@@ -727,7 +727,7 @@ export function chatStyles(): string {
       gap: 0.5rem;
     }
     .info-banner .mono {
-      color: var(--accent);
+      color: var(--ink);
       font-weight: 500;
     }
     .chat-log {
@@ -744,6 +744,23 @@ export function chatStyles(): string {
       text-align: center;
       color: var(--muted);
       padding: 3rem 1.5rem;
+      position: relative;
+    }
+    .chat-empty::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 120px;
+      height: 120px;
+      background-image: url('/static/favicon.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      opacity: 0.04;
+      pointer-events: none;
+      z-index: -1;
     }
     .chat-empty > p:first-child {
       font-size: 1.05rem;
@@ -772,7 +789,7 @@ export function chatStyles(): string {
       background: var(--panel);
       padding: 0.15rem 0.35rem;
       border-radius: 0.3rem;
-      color: var(--accent);
+      color: var(--ink);
     }
     .chat-row {
       display: flex;
