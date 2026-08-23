@@ -20,6 +20,7 @@ export type ThreadMessage = {
 
 export type Thread = {
   readonly id: string;
+  readonly title?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messages: readonly ThreadMessage[];
@@ -219,7 +220,7 @@ export async function listThreads(repoRoot: string): Promise<readonly ThreadSumm
       if (thread !== undefined) {
         threads.push({
           id: thread.id,
-          title: extractTitle(thread.messages),
+          title: thread.title ?? extractTitle(thread.messages),
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
           messageCount: thread.messages.length,
@@ -237,6 +238,50 @@ export async function listThreads(repoRoot: string): Promise<readonly ThreadSumm
     return threads;
   } catch {
     return [];
+  }
+}
+
+/**
+ * Renames a thread by updating its title. Returns the updated thread on success, undefined on failure.
+ * Validates threadId to prevent path traversal attacks and trims/validates the new title.
+ */
+export async function renameThread(
+  repoRoot: string,
+  threadId: string,
+  title: string,
+): Promise<Thread | undefined> {
+  // Validate threadId to prevent path traversal
+  if (threadId.includes('..') || threadId.includes('/') || threadId.includes('\\')) {
+    return undefined;
+  }
+
+  const trimmedTitle = title.trim();
+  
+  // Reject empty titles
+  if (trimmedTitle === '') {
+    return undefined;
+  }
+
+  // Soft-cap at 80 chars
+  const cappedTitle = trimmedTitle.length > 80 ? trimmedTitle.slice(0, 80) : trimmedTitle;
+
+  const thread = await loadThread(repoRoot, threadId);
+  if (thread === undefined) {
+    return undefined;
+  }
+
+  const updated: Thread = {
+    ...thread,
+    title: cappedTitle,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const threadPath = getThreadPath(repoRoot, threadId);
+  try {
+    await writeFile(threadPath, JSON.stringify(updated, null, 2), 'utf8');
+    return updated;
+  } catch {
+    return undefined;
   }
 }
 
@@ -395,6 +440,7 @@ function isValidThread(value: unknown): value is Thread {
   const obj = value as Record<string, unknown>;
   return (
     typeof obj.id === 'string' &&
+    (obj.title === undefined || typeof obj.title === 'string') &&
     typeof obj.createdAt === 'string' &&
     typeof obj.updatedAt === 'string' &&
     Array.isArray(obj.messages) &&

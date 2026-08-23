@@ -457,12 +457,17 @@ export function chatClientScript(): string {
           var active = currentThreadId === t.id ? ' is-active' : '';
           var title = t.title || 'Sin título';
           if (title.length > 50) title = title.slice(0, 47) + '...';
+          var msgCount = t.messageCount || 0;
+          var dateStr = new Date(t.updatedAt).toLocaleString();
           html += '<div class="thread-item' + active + '" data-thread-id="' + t.id + '">' +
                   '<div class="thread-content">' +
                   '<div class="thread-title">' + title + '</div>' +
-                  '<div class="thread-meta">' + new Date(t.updatedAt).toLocaleString() + '</div>' +
+                  '<div class="thread-meta">' + msgCount + ' msgs · ' + dateStr + '</div>' +
                   '</div>' +
+                  '<div class="thread-actions">' +
+                  '<button class="thread-rename-btn" data-thread-id="' + t.id + '" title="Renombrar hilo">✎</button>' +
                   '<button class="thread-delete-btn" data-thread-id="' + t.id + '" title="Borrar hilo">✕</button>' +
+                  '</div>' +
                   '</div>';
         });
         html += '</div>';
@@ -471,13 +476,25 @@ export function chatClientScript(): string {
         panel.querySelectorAll('.thread-item').forEach(function (item) {
           var threadId = item.getAttribute('data-thread-id');
           var deleteBtn = item.querySelector('.thread-delete-btn');
+          var renameBtn = item.querySelector('.thread-rename-btn');
           
           item.addEventListener('click', function (e) {
-            if (e.target === deleteBtn || deleteBtn.contains(e.target)) {
+            if (e.target === deleteBtn || deleteBtn.contains(e.target) ||
+                e.target === renameBtn || renameBtn.contains(e.target)) {
               return;
             }
             loadThread(threadId);
           });
+          
+          if (renameBtn) {
+            renameBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              var newTitle = prompt('Nuevo título:');
+              if (newTitle && newTitle.trim()) {
+                renameThreadById(threadId, newTitle.trim());
+              }
+            });
+          }
           
           if (deleteBtn) {
             deleteBtn.addEventListener('click', function (e) {
@@ -491,6 +508,25 @@ export function chatClientScript(): string {
       })
       .catch(function (err) {
         console.error('Failed to load threads:', err);
+      });
+  }
+
+  function renameThreadById(threadId, newTitle) {
+    fetchWithToken('/api/threads/' + threadId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle })
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function () {
+        loadThreads();
+      })
+      .catch(function (err) {
+        alert('Error al renombrar el hilo: ' + (err.message || String(err)));
+        console.error('Failed to rename thread:', err);
       });
   }
 

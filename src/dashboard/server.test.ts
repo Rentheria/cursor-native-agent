@@ -956,6 +956,139 @@ describe('dashboard token authentication', () => {
       await closeServer(server);
     }
   });
+
+  it('PATCH_/api/threads/:id_debería_rechazar_sin_token_con_401', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/thread-123`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Nuevo título' }),
+      });
+      assert.equal(res.status, 401);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'unauthorized');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('PATCH_/api/threads/:id_debería_renombrar_thread_existente', async () => {
+    const { createThread } = await import('../lib/threads-store.js');
+    const thread = await createThread(tmpRoot, 'Thread a renombrar');
+
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/${thread.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ title: 'Título actualizado' }),
+      });
+      assert.equal(res.status, 200);
+      const json = await res.json() as { thread: { id: string; title: string } };
+      assert.equal(json.thread.id, thread.id);
+      assert.equal(json.thread.title, 'Título actualizado');
+
+      const { loadThread } = await import('../lib/threads-store.js');
+      const loaded = await loadThread(tmpRoot, thread.id);
+      assert.ok(loaded);
+      assert.equal(loaded.title, 'Título actualizado');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('PATCH_/api/threads/:id_debería_devolver_404_si_no_existe', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/thread-no-existe`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ title: 'Nuevo título' }),
+      });
+      assert.equal(res.status, 404);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'not_found');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('PATCH_/api/threads/:id_debería_rechazar_título_vacío_con_400', async () => {
+    const { createThread } = await import('../lib/threads-store.js');
+    const thread = await createThread(tmpRoot, 'Thread inicial');
+
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/${thread.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ title: '   ' }),
+      });
+      assert.equal(res.status, 400);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'invalid_title');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('PATCH_/api/threads/:id_debería_rechazar_origin_externo_con_403', async () => {
+    const { createThread } = await import('../lib/threads-store.js');
+    const thread = await createThread(tmpRoot, 'Thread inicial');
+
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/${thread.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+          'Origin': 'http://evil.com',
+        },
+        body: JSON.stringify({ title: 'Título malicioso' }),
+      });
+      assert.equal(res.status, 403);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'forbidden');
+    } finally {
+      await closeServer(server);
+    }
+  });
 });
 
 /** Extrae el texto de los eventos SSE `delta`, en orden. */
