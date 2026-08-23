@@ -353,6 +353,7 @@ function isValidThread(value: unknown): value is Thread {
   const obj = value as Record<string, unknown>;
   return (
     typeof obj.id === 'string' &&
+    (obj.title === undefined || typeof obj.title === 'string') &&
     typeof obj.createdAt === 'string' &&
     typeof obj.updatedAt === 'string' &&
     Array.isArray(obj.messages) &&

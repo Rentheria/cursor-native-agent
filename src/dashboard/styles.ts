@@ -881,6 +881,28 @@ export function chatStyles(): string {
       font-size: 0.7rem;
       color: var(--muted);
     }
+    .thread-actions {
+      display: flex;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+    .thread-rename-btn {
+      padding: 0.25rem 0.4rem;
+      border: 1px solid var(--line);
+      border-radius: 0.45rem;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      transition: all 120ms ease;
+      flex-shrink: 0;
+    }
+    .thread-rename-btn:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
     .thread-delete-btn {
       padding: 0.25rem 0.4rem;
       border: 1px solid var(--line);
