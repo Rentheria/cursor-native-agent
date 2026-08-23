@@ -34,7 +34,7 @@ Usage:
   npm run agent -- -h                      Alias for --help
 
 Flags:
-  --interactive, -i   Interactive REPL mode
+  --interactive, -i   Interactive REPL mode (maintains thread history across sessions)
   --debug             Enable debug logging
   --yes, -y           Skip onboarding prompts (use defaults)
   --attach <file>     Attach file(s) to the prompt (can be used multiple times)
@@ -47,9 +47,13 @@ Flags:
   • @./relative/path.txt       Relative paths work too
 
 / Commands (Slash commands):
-  Invoke skills explicitly:
+  Built-in commands (handled locally, no model call):
   • /help                      Show available commands and skills
-  • /clear                     Clear thread history
+  • /clear                     Clear thread history (start fresh conversation)
+  • /threads                   List all threads
+  • exit, .exit, /exit         Quit interactive mode
+
+  Skill commands (passed to model with specific skill loaded):
   • /skill-name <args>         Run a specific skill (e.g., /git-commit, /summarize-file)
 
 File Attachments:
@@ -59,11 +63,17 @@ File Attachments:
   • Binary files: Skipped with a note
 
   Requires MarkItDown for PDFs: pip install markitdown[pdf]
+  
+  In interactive mode: --attach flags apply to all turns in the session
 
 Build Execution Modes / Modos de ejecución de builds:
-  • CLI (terminal):
+  • CLI one-shot (terminal):
     → Builds run with --force immediately (direct)
     → Always uses --trust for cursor-agent tooling
+  • CLI interactive (REPL):
+    → Same as one-shot: builds run with --force immediately
+    → Maintains thread history across sessions (thread ID: cli-repl)
+    → All turns use full pipeline: skills + memory + attachments + @ mentions
   • Dashboard/Telegram (safeMode):
     → Builds require user confirmation: Confirmar/Cancelar (or /ok /no)
     → --force applied only after explicit confirmation
@@ -76,6 +86,8 @@ Examples:
   npm run agent -- --attach report.pdf "summarize this PDF"
   npm run agent -- "@data.csv compare with @report.pdf"
   npm run agent -- "/help"
+  npm run agent -- -i                          # Start interactive mode
+  npm run agent -- -i --attach doc.pdf         # Interactive with attachment
 `);
 }
 
@@ -125,7 +137,10 @@ async function main(): Promise<void> {
 
   if (isInteractive) {
     const { runRepl } = await import('./repl.js');
-    await runRepl(repoRoot, { debug });
+    await runRepl(repoRoot, { 
+      debug,
+      ...(attachments.length > 0 ? { attachments } : {}),
+    });
     return;
   }
 
