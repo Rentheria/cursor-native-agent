@@ -180,6 +180,7 @@ export function chatClientScript(): string {
           currentContext = { userPrompt: turnPrompt, assistantReply: turnReply || '' };
           appendBubble('user', turnPrompt, false);
           if (turnReply) {
+            var el = appendBubble('assistant', turnReply, false);
             fetchWithToken('/api/markdown', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -188,10 +189,8 @@ export function chatClientScript(): string {
               if (!res.ok) throw new Error('HTTP ' + res.status);
               return res.json();
             }).then(function (data) {
-              appendBubble('assistant', data.markdown || turnReply, true);
-            }).catch(function () {
-              appendBubble('assistant', turnReply, false);
-            });
+              el.innerHTML = data.markdown || turnReply;
+            }).catch(function () {});
           } else {
             var noReplyEl = appendBubble('assistant', 'sin respuesta guardada', false);
             noReplyEl.style.fontStyle = 'italic';
@@ -602,17 +601,16 @@ export function chatClientScript(): string {
         
         data.thread.messages.forEach(function (msg) {
           if (msg.role === 'assistant') {
+            var el = appendBubble('assistant', msg.content, false);
             fetchWithToken('/api/markdown', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ text: msg.content })
             }).then(function (res) { return res.json(); })
               .then(function (mdData) {
-                appendBubble('assistant', mdData.markdown || msg.content, true);
+                el.innerHTML = mdData.markdown || msg.content;
               })
-              .catch(function () {
-                appendBubble('assistant', msg.content, false);
-              });
+              .catch(function () {});
           } else {
             appendBubble('user', msg.content, false);
           }
