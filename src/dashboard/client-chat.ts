@@ -30,6 +30,12 @@ export function chatClientScript(): string {
   var threadIndicator = document.getElementById('chat-thread-indicator');
   if (!form || !input || !log || !sendBtn) return;
 
+  var fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.multiple = true;
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
   var currentContext = null;
   var currentThreadId = localStorage.getItem('currentThreadId') || null;
   var currentThreadTitle = null;
@@ -58,10 +64,12 @@ export function chatClientScript(): string {
       var item = document.createElement('div');
       item.className = 'attach-item';
       item.style.cssText = 'display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.5rem;background:var(--panel);border:1px solid var(--line);border-radius:0.4rem;margin:0.2rem;font-size:0.85rem;';
+      item.title = path;
       
       var label = document.createElement('span');
-      label.textContent = path;
-      label.style.cssText = 'color:var(--ink);';
+      var filename = path.split('/').pop() || path;
+      label.textContent = filename;
+      label.style.cssText = 'color:var(--ink);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
       
       var remove = document.createElement('button');
       remove.type = 'button';
@@ -79,17 +87,81 @@ export function chatClientScript(): string {
     });
   }
 
+  function handleFiles(files) {
+    if (!files || files.length === 0) return;
+    
+    var fileArray = Array.from(files);
+    var pending = fileArray.length;
+    
+    fileArray.forEach(function(file) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var base64Data = e.target.result.split(',')[1];
+        
+        fetchWithToken('/api/attachments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            files: [{ name: file.name, data: base64Data }]
+          })
+        }).then(function(res) {
+          if (!res.ok) throw new Error('Upload failed: ' + res.status);
+          return res.json();
+        }).then(function(data) {
+          if (data.paths && data.paths.length > 0) {
+            data.paths.forEach(function(p) {
+              if (!attachments.includes(p)) {
+                attachments.push(p);
+              }
+            });
+            updateAttachUI();
+          }
+          pending--;
+        }).catch(function(err) {
+          console.error('Upload error:', err);
+          pending--;
+        });
+      };
+      reader.onerror = function() {
+        console.error('File read error:', file.name);
+        pending--;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   if (attachBtn) {
     attachBtn.addEventListener('click', function () {
-      var path = prompt('Ruta del archivo a adjuntar (puede ser absoluta o relativa al repo):\\n\\nEjemplo: src/core/agent-turn.ts o @src/core/agent-turn.ts');
-      if (path) {
-        path = path.trim();
-        if (path.startsWith('@')) path = path.slice(1);
-        if (path && !attachments.includes(path)) {
-          attachments.push(path);
-          updateAttachUI();
-        }
-      }
+      fileInput.click();
+    });
+  }
+
+  fileInput.addEventListener('change', function(e) {
+    handleFiles(e.target.files);
+    fileInput.value = '';
+  });
+
+  var chatArea = document.getElementById('chat-area');
+  if (chatArea) {
+    chatArea.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      chatArea.style.borderColor = 'var(--accent)';
+    });
+
+    chatArea.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      chatArea.style.borderColor = '';
+    });
+
+    chatArea.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      chatArea.style.borderColor = '';
+      
+      var files = e.dataTransfer.files;
+      handleFiles(files);
     });
   }
 

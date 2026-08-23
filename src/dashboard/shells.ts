@@ -118,7 +118,7 @@ export function renderChatShell(options: {
           <p class="chat-empty-hint">
             <strong>@ Menciones:</strong> <code>@src/file.ts</code> incluye archivos · <code>@folder/</code> lista directorios<br>
             <strong>/ Comandos:</strong> <code>/help</code> · <code>/skill-name args</code><br>
-            <strong>📎 Adjuntar:</strong> Rutas locales (el agente lee del mismo disco)
+            <strong>📎 Adjuntar:</strong> Clic o arrastrá archivos (análisis local, sin subir a servidor externo)
           </p>
         </div>
       </div>
@@ -126,14 +126,14 @@ export function renderChatShell(options: {
         <div class="composer-attachments" id="attach-container" style="display:none">
           <div class="attach-list" id="attach-list"></div>
         </div>
-        <div class="composer-shell">
-          <button type="button" id="attach-btn" class="attach-btn" aria-label="Adjuntar archivo" title="Adjuntar archivo (ruta local)">📎</button>
+        <div class="composer-shell" id="chat-area">
+          <button type="button" id="attach-btn" class="attach-btn" aria-label="Adjuntar archivo" title="Adjuntar archivos (clic o arrastrá aquí)">📎</button>
           <textarea id="chat-input" name="prompt" rows="1" autocomplete="off" placeholder="Mensaje al agente… (@ para archivos, / para comandos)" required></textarea>
           <button type="submit" id="chat-send" aria-label="Enviar">Enviar</button>
         </div>
         <p class="composer-hint">
           Enter para enviar · Shift+Enter para nueva línea<br>
-          <span class="hint-muted">@ para archivos · / para comandos · 📎 para rutas</span>
+          <span class="hint-muted">@ para archivos · / para comandos · 📎 para adjuntar (o arrastrá)</span>
         </p>
       </form>
     </div>

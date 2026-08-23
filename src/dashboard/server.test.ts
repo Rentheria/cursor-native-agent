@@ -1091,6 +1091,175 @@ describe('dashboard token authentication', () => {
   });
 });
 
+describe('dashboard POST /api/attachments', () => {
+  let tmpRoot = '';
+
+  before(async () => {
+    tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-dash-attach-'));
+    await mkdir(path.join(tmpRoot, 'logs'), { recursive: true });
+  });
+
+  after(async () => {
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('debería_responder_404_cuando_chat_está_deshabilitado', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: false,
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [] }),
+      });
+      assert.equal(res.status, 404);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'not_found');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_requerir_autenticación', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [] }),
+      });
+      assert.equal(res.status, 401);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_subir_y_guardar_archivo', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const testContent = 'Hello, world!';
+      const base64Content = Buffer.from(testContent).toString('base64');
+      
+      const res = await fetch(`${baseUrl}/api/attachments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({
+          files: [{ name: 'test.txt', data: base64Content }],
+        }),
+      });
+      
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as { paths: string[] };
+      assert.ok(Array.isArray(body.paths));
+      assert.equal(body.paths.length, 1);
+      assert.match(body.paths[0] ?? '', /\.attachments.*test\.txt$/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_rechazar_archivos_vacíos', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/attachments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ files: [] }),
+      });
+      
+      assert.equal(res.status, 400);
+      const body = (await res.json()) as { error: string };
+      assert.equal(body.error, 'invalid_files');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_sanitizar_nombres_de_archivo', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const testContent = 'test';
+      const base64Content = Buffer.from(testContent).toString('base64');
+      
+      const res = await fetch(`${baseUrl}/api/attachments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({
+          files: [{ name: '../../../etc/passwd', data: base64Content }],
+        }),
+      });
+      
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as { paths: string[] };
+      assert.ok(Array.isArray(body.paths));
+      const savedPath = body.paths[0] ?? '';
+      assert.match(savedPath, /\.attachments/);
+      assert.doesNotMatch(savedPath, /\.\.\//);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('debería_bloquear_requests_cross_origin', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/attachments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+          'Origin': 'http://evil.com',
+        },
+        body: JSON.stringify({
+          files: [{ name: 'test.txt', data: 'dGVzdA==' }],
+        }),
+      });
+      assert.equal(res.status, 403);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'forbidden');
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 /** Extrae el texto de los eventos SSE `delta`, en orden. */
 function collectSseDeltas(body: string): string[] {
   return body
