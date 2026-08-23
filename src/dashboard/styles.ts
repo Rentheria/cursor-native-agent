@@ -786,7 +786,7 @@ export function chatStyles(): string {
     }
     .composer-shell {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: auto 1fr auto;
       gap: 0.55rem;
       align-items: end;
       padding: 0.55rem 0.55rem 0.55rem 0.85rem;
@@ -796,6 +796,28 @@ export function chatStyles(): string {
       box-shadow:
         0 10px 30px color-mix(in srgb, var(--ink) 6%, transparent),
         0 1px 0 color-mix(in srgb, #fff 70%, transparent) inset;
+    }
+    .attach-btn {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      padding: 0.5rem;
+      cursor: pointer;
+      font-size: 1.2rem;
+      line-height: 1;
+      opacity: 0.7;
+      transition: opacity 150ms ease;
+    }
+    .attach-btn:hover {
+      opacity: 1;
+    }
+    .composer-attachments {
+      padding: 0.5rem 0.75rem 0;
+    }
+    .attach-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
     }
     .composer textarea {
       font: inherit;
@@ -829,6 +851,11 @@ export function chatStyles(): string {
       font-size: 0.72rem;
       color: var(--muted);
       font-family: var(--mono);
+      line-height: 1.5;
+    }
+    .hint-muted {
+      opacity: 0.7;
+      font-size: 0.9em;
     }
     .button {
       font: inherit;

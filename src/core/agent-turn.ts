@@ -34,11 +34,17 @@ import {
   createThread,
   appendToThread,
   buildThreadContext,
+  deleteThread,
 } from '../lib/threads-store.js';
 import {
   prepareAttachment,
   type PreparedAttachment,
 } from '../lib/attachments/index.js';
+import {
+  parseMentions,
+  parseSlashCommand,
+  buildHelpMessage,
+} from '../lib/mentions/index.js';
 
 export type AgentRunner = (options: {
   readonly prompt: string;
@@ -174,7 +180,57 @@ export async function runAgentTurn(
   try {
     console.error('[agent] Loading skills…');
     const skills = await loadAllSkills(repoRoot);
-    let matchedSkills = await selectRelevantSkills(userPrompt, skills);
+    
+    // Check for slash command first
+    const slashCommand = parseSlashCommand(userPrompt, skills);
+    
+    // Handle built-in commands
+    if (slashCommand?.isBuiltIn === true) {
+      if (slashCommand.command === 'help') {
+        const helpMessage = buildHelpMessage(skills);
+        
+        if (effectiveThreadId !== undefined) {
+          await appendToThread(repoRoot, effectiveThreadId, 'assistant', helpMessage);
+        }
+        
+        return {
+          reply: helpMessage,
+          stderr: '',
+          exitCode: 0,
+          ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
+        };
+      }
+      
+      if (slashCommand.command === 'clear' && effectiveThreadId !== undefined) {
+        await deleteThread(repoRoot, effectiveThreadId);
+        const clearMessage = 'Thread cleared. Starting fresh conversation.';
+        
+        // Create new thread for next message
+        const newThread = await createThread(repoRoot, '');
+        
+        return {
+          reply: clearMessage,
+          stderr: '',
+          exitCode: 0,
+          threadId: newThread.id,
+        };
+      }
+    }
+    
+    // Parse @ mentions
+    const mentionsResult = await parseMentions(userPrompt, repoRoot);
+    console.error(
+      `[agent] @ mentions: ${mentionsResult.mentions.length > 0 ? mentionsResult.mentions.map((m) => m.originalMention).join(', ') : '(none)'}`,
+    );
+    
+    // Resolve slash command to skill or use regular matching
+    let matchedSkills = slashCommand?.skillName !== undefined
+      ? skills.filter((skill) => skill.name === slashCommand.skillName)
+      : await selectRelevantSkills(userPrompt, skills);
+    
+    if (slashCommand?.skillName !== undefined) {
+      console.error(`[agent] Slash command: /${slashCommand.command} → skill ${slashCommand.skillName}`);
+    }
     
     // If build intent is detected but clarify-build didn't match, inject it manually
     const hasClarifyBuildSkill = matchedSkills.some((skill) => skill.name === 'clarify-build');
@@ -297,6 +353,32 @@ export async function runAgentTurn(
         }),
       );
     }
+    
+    // Add @ mentions as attachments
+    for (const mention of mentionsResult.mentions) {
+      if (mention.error !== undefined) {
+        console.error(`[agent] @ mention error: ${mention.originalMention} → ${mention.error}`);
+        preparedAttachments.push({
+          kind: 'binary-skipped',
+          originalPath: mention.resolvedPath,
+          text: `[@${mention.originalMention}: ${mention.error}]`,
+        });
+      } else if (mention.kind === 'file' && mention.content !== undefined) {
+        preparedAttachments.push({
+          kind: 'text',
+          originalPath: mention.resolvedPath,
+          text: mention.content,
+          ...(mention.truncated === true ? { truncated: true } : {}),
+        });
+      } else if (mention.kind === 'directory' && mention.content !== undefined) {
+        preparedAttachments.push({
+          kind: 'text',
+          originalPath: mention.resolvedPath,
+          text: mention.content,
+          ...(mention.truncated === true ? { truncated: true } : {}),
+        });
+      }
+    }
 
     report = buildTurnDebugReport({
       prompt: userPrompt,
@@ -376,7 +458,10 @@ La confirmación expira en 10 minutos.`;
     
     // Prepend context/thread history AFTER build-intent check
     // Thread context has priority over options.context (deprecated in favor of threads)
-    let effectivePrompt = userPrompt;
+    // Use cleaned prompt from mentions parsing, and append slash command args if present
+    let effectivePrompt = slashCommand?.args !== undefined && slashCommand.args !== ''
+      ? slashCommand.args
+      : mentionsResult.cleanedPrompt;
     if (threadContext !== '' && !isBuildRequest) {
       // Thread history: prepend last N exchanges
       effectivePrompt = `Previous conversation:\n${threadContext}\n\nCurrent message:\n${userPrompt}`;

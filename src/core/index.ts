@@ -40,6 +40,18 @@ Flags:
   --attach <file>     Attach file(s) to the prompt (can be used multiple times)
   --help, -h          Show this help
 
+@ Mentions (Cursor IDE-style):
+  Reference files and folders directly in your prompt:
+  • @src/foo.ts                Include file content
+  • @folder/                   List directory contents
+  • @./relative/path.txt       Relative paths work too
+
+/ Commands (Slash commands):
+  Invoke skills explicitly:
+  • /help                      Show available commands and skills
+  • /clear                     Clear thread history
+  • /skill-name <args>         Run a specific skill (e.g., /git-commit, /summarize-file)
+
 File Attachments:
   • PDFs: Converted to markdown with Microsoft MarkItDown (saves tokens vs raw text)
   • Images: Passed through to cursor-agent (best effort image support)
@@ -59,10 +71,11 @@ Build Execution Modes / Modos de ejecución de builds:
 
 Examples:
   npm run agent -- "summarize MEMORY.md"
-  npm run agent -- --interactive
-  npm run agent -- --debug "explain error in logs"
-  npm run agent -- --attach document.pdf "summarize this PDF"
-  npm run agent -- --attach report.pdf --attach data.csv "compare these files"
+  npm run agent -- "@src/core/agent-turn.ts explain this file"
+  npm run agent -- "/git-commit for the recent changes"
+  npm run agent -- --attach report.pdf "summarize this PDF"
+  npm run agent -- "@data.csv compare with @report.pdf"
+  npm run agent -- "/help"
 `);
 }
 
