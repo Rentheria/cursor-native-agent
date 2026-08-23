@@ -659,9 +659,12 @@ El dashboard registra `POST /api/chat` (SSE) y muestra una caja de chat. Usa el
 mismo `runAgentTurn` que `npm run agent` / Telegram, con streaming
 (`--output-format stream-json --stream-partial-output`).
 
-**Adjuntar archivos:** Por ahora, el dashboard acepta paths de archivos en el
-JSON body (`{ "prompt": "...", "attachments": ["/path/to/file.pdf"] }`). Upload
-desde el navegador (multipart/form-data) es un TODO para versiones futuras.
+**Adjuntar archivos:** El dashboard ahora soporta adjuntar archivos mediante:
+- **Clic en 📎**: Abre selector de archivos (soporte múltiple)
+- **Drag-and-drop**: Arrastrá archivos al área de chat
+- **@ Mentions**: Todavía podés usar `@path/to/file` en el mensaje para power users
+
+Los archivos se suben vía JSON base64 a `/api/attachments`, se guardan localmente en `.attachments/` (gitignored), y el agente los analiza por path (mismo análisis local que con `npm run agent --attach`). Límite de 10MB por archivo.
 
 **Autenticación:** El dashboard usa cookies de sesión HttpOnly para localhost (happy path: abrís el dashboard y funciona). El token `DASHBOARD_TOKEN` (`.env`) se usa solo para APIs fuera del navegador o si borraste cookies. Modal "Desbloquear" como fallback.
 
