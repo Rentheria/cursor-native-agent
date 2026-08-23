@@ -3,6 +3,7 @@ import type {
   MemoryLoadResult,
   SkillDocument,
 } from '../lib/types.js';
+import type { PreparedAttachment } from '../lib/attachments/index.js';
 
 export function assemblePrompt(params: {
   readonly userPrompt: string;
@@ -10,8 +11,9 @@ export function assemblePrompt(params: {
   readonly memory: MemoryLoadResult;
   readonly workspacePath?: string;
   readonly repoRoot?: string;
+  readonly attachments?: readonly PreparedAttachment[];
 }): AssembledPrompt {
-  const { userPrompt, matchedSkills, memory, workspacePath, repoRoot } = params;
+  const { userPrompt, matchedSkills, memory, workspacePath, repoRoot, attachments } = params;
   const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
   
   const sections: string[] = [
@@ -92,6 +94,51 @@ export function assemblePrompt(params: {
     sections.push('');
     sections.push('_No skills matched this prompt._');
     sections.push('');
+  }
+
+  if (attachments !== undefined && attachments.length > 0) {
+    sections.push('## Attached files');
+    sections.push('');
+    sections.push(`The user has attached ${String(attachments.length)} file(s). Process them according to the request.`);
+    sections.push('');
+    for (const attachment of attachments) {
+      sections.push(`### Attachment: ${attachment.originalPath}`);
+      sections.push('');
+      if (attachment.kind === 'pdf') {
+        sections.push('Type: PDF (converted to markdown with MarkItDown)');
+        sections.push('');
+        if (attachment.text !== undefined) {
+          sections.push(attachment.text);
+        }
+        if (attachment.truncated === true) {
+          sections.push('');
+          sections.push('_Note: PDF content was truncated due to size._');
+        }
+      } else if (attachment.kind === 'image') {
+        sections.push(`Type: Image (${attachment.originalPath})`);
+        sections.push('');
+        sections.push(`Image path: \`${attachment.imagePath ?? attachment.originalPath}\``);
+        sections.push('');
+        sections.push('_Note: Image files are passed through. Use appropriate tools to process them._');
+      } else if (attachment.kind === 'text') {
+        sections.push('Type: Text file');
+        sections.push('');
+        if (attachment.text !== undefined) {
+          sections.push('```');
+          sections.push(attachment.text);
+          sections.push('```');
+        }
+        if (attachment.truncated === true) {
+          sections.push('');
+          sections.push('_Note: Text file was truncated due to size._');
+        }
+      } else if (attachment.kind === 'binary-skipped') {
+        sections.push('Type: Binary file (skipped)');
+        sections.push('');
+        sections.push(attachment.text ?? `[Binary file: ${attachment.originalPath}]`);
+      }
+      sections.push('');
+    }
   }
 
   sections.push('## User request');

@@ -105,6 +105,11 @@ No hace falta tocar TypeScript para cambiar el comportamiento del agente.
    - Windows PowerShell: `irm 'https://cursor.com/install?win32=true' | iex`
    - Docs: [cursor.com/docs/cli/installation](https://cursor.com/docs/cli/installation)
 3. **Login:** `cursor-agent login` (abre navegador)
+4. **(Opcional) MarkItDown para PDFs:** Para adjuntar archivos PDF, instala:
+   ```bash
+   pip install markitdown[pdf]
+   ```
+   MarkItDown convierte PDFs a markdown, ahorrando tokens vs texto plano o imágenes OCR.
 
 ### Setup en un comando
 
@@ -172,6 +177,66 @@ Un prompt, un armado de contexto, una llamada a `cursor-agent -p`, y listo.
 ```bash
 npm run agent -- "resume en 3 bullets el archivo MEMORY.md"
 ```
+
+#### Adjuntar archivos (nuevo)
+
+Podés adjuntar archivos locales al prompt con `--attach` o con **@ mentions** (estilo Cursor IDE):
+
+```bash
+# Con --attach (referencia a path)
+npm run agent -- --attach document.pdf "resume este PDF"
+
+# Con @ mentions (más natural)
+npm run agent -- "@document.pdf resume este archivo"
+npm run agent -- "@src/core/agent-turn.ts explica este archivo"
+npm run agent -- "@data/ lista los archivos aquí"
+
+# Múltiples archivos
+npm run agent -- "@report.pdf compara con @data.csv"
+npm run agent -- --attach report.pdf --attach data.csv "compara estos archivos"
+
+# Imagen (se pasa tal cual a cursor-agent)
+npm run agent -- "@screenshot.png describe esta imagen"
+```
+
+**@ Mentions** funcionan como en Cursor IDE:
+- `@path/to/file.ts` → incluye contenido del archivo
+- `@folder/` → lista contenidos del directorio (primeros 20 archivos)
+- `@./relative/path` → paths relativos al repo root
+
+**Nota importante**: Los archivos se analizan **en su ubicación original** (no se copian). El agente corre en la misma máquina que tus archivos, así que `@src/foo.ts` lee directamente desde disco. Esto es más eficiente que subir/copiar archivos.
+
+**Tipos de archivos soportados:**
+
+| Tipo | Manejo | Requisitos |
+|---|---|---|
+| **PDF** (`.pdf`) | Convertido a markdown con MarkItDown (ahorra tokens vs OCR/raw) | `pip install markitdown[pdf]` |
+| **Imágenes** (`.jpg`, `.png`, `.gif`, `.webp`) | Pasados a cursor-agent (mejor esfuerzo, depende del modelo) | — |
+| **Texto** (`.txt`, `.md`, `.json`, `.csv`, etc.) | Contenido incluido con límite de 50KB | — |
+| **Binarios** (otros) | Omitidos con nota | — |
+
+**Por qué MarkItDown para PDFs:** Los PDFs pueden ser enormes (cientos de miles de tokens si se extraen como texto plano o con OCR). MarkItDown genera markdown limpio y estructurado que es más compacto y fácil de procesar para el modelo. El límite por defecto es 100KB de markdown; si se excede, se trunca con nota.
+
+#### Comandos slash (nuevo)
+
+Invocá skills explícitamente con `/` (como en Cursor IDE):
+
+```bash
+# Ver ayuda y skills disponibles
+npm run agent -- "/help"
+
+# Invocar un skill específico
+npm run agent -- "/git-commit para los cambios recientes"
+npm run agent -- "/summarize-file MEMORY.md"
+npm run agent -- "/explain-error TypeError: Cannot read properties"
+
+# Limpiar thread (si threads están habilitados)
+npm run agent -- "/clear"
+```
+
+Cuando usás `/skill-name`, el agente carga **solo ese skill** (no hace matching automático por TF-IDF/triggers). Es útil cuando querés forzar un skill específico.
+
+**Skills disponibles**: correlo con `/help` para ver la lista actual, o mirá `skills/*.md`.
 
 Qué esperar:
 
@@ -593,6 +658,10 @@ en `127.0.0.1`.
 El dashboard registra `POST /api/chat` (SSE) y muestra una caja de chat. Usa el
 mismo `runAgentTurn` que `npm run agent` / Telegram, con streaming
 (`--output-format stream-json --stream-partial-output`).
+
+**Adjuntar archivos:** Por ahora, el dashboard acepta paths de archivos en el
+JSON body (`{ "prompt": "...", "attachments": ["/path/to/file.pdf"] }`). Upload
+desde el navegador (multipart/form-data) es un TODO para versiones futuras.
 
 **Autenticación:** El dashboard usa cookies de sesión HttpOnly para localhost (happy path: abrís el dashboard y funciona). El token `DASHBOARD_TOKEN` (`.env`) se usa solo para APIs fuera del navegador o si borraste cookies. Modal "Desbloquear" como fallback.
 

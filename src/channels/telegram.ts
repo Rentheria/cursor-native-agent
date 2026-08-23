@@ -53,6 +53,9 @@ export type ProcessInboundFn = (
   confirmedForce?: boolean,
   workspacePath?: string,
   threadId?: string,
+  // TODO: Add file attachments support (photos, documents) by accepting
+  // file_id from Telegram API, downloading via getFile, and passing paths
+  // to the agent turn. Wire similar to dashboard's attachments parameter.
 ) => Promise<AgentTurnResult>;
 
 export interface TelegramBotOptions {

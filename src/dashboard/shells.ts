@@ -115,15 +115,26 @@ export function renderChatShell(options: {
       <div class="chat-log" id="chat-log" aria-live="polite">
         <div class="chat-empty" id="chat-empty">
           <p>Preguntale al agente lo que quieras.</p>
-          <p class="chat-empty-hint">Por ejemplo: "qué hace este repo" o "dame el pitch de una línea"</p>
+          <p class="chat-empty-hint">
+            <strong>@ Menciones:</strong> <code>@src/file.ts</code> incluye archivos · <code>@folder/</code> lista directorios<br>
+            <strong>/ Comandos:</strong> <code>/help</code> · <code>/skill-name args</code><br>
+            <strong>📎 Adjuntar:</strong> Rutas locales (el agente lee del mismo disco)
+          </p>
         </div>
       </div>
       <form class="composer" id="chat-form">
+        <div class="composer-attachments" id="attach-container" style="display:none">
+          <div class="attach-list" id="attach-list"></div>
+        </div>
         <div class="composer-shell">
-          <textarea id="chat-input" name="prompt" rows="1" autocomplete="off" placeholder="Mensaje al agente…" required></textarea>
+          <button type="button" id="attach-btn" class="attach-btn" aria-label="Adjuntar archivo" title="Adjuntar archivo (ruta local)">📎</button>
+          <textarea id="chat-input" name="prompt" rows="1" autocomplete="off" placeholder="Mensaje al agente… (@ para archivos, / para comandos)" required></textarea>
           <button type="submit" id="chat-send" aria-label="Enviar">Enviar</button>
         </div>
-        <p class="composer-hint">Enter para enviar · Shift+Enter para nueva línea</p>
+        <p class="composer-hint">
+          Enter para enviar · Shift+Enter para nueva línea<br>
+          <span class="hint-muted">@ para archivos · / para comandos · 📎 para rutas</span>
+        </p>
       </form>
     </div>
   </div>

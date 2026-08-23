@@ -29,6 +29,7 @@ Usage:
   npm run agent -- --interactive           Start interactive REPL
   npm run agent -- -i                      Alias for --interactive
   npm run agent -- --debug "<prompt>"      Run with debug output
+  npm run agent -- --attach <file> "<prompt>"  Attach file(s) to prompt
   npm run agent -- --help                  Show this help
   npm run agent -- -h                      Alias for --help
 
@@ -36,7 +37,28 @@ Flags:
   --interactive, -i   Interactive REPL mode
   --debug             Enable debug logging
   --yes, -y           Skip onboarding prompts (use defaults)
+  --attach <file>     Attach file(s) to the prompt (can be used multiple times)
   --help, -h          Show this help
+
+@ Mentions (Cursor IDE-style):
+  Reference files and folders directly in your prompt:
+  • @src/foo.ts                Include file content
+  • @folder/                   List directory contents
+  • @./relative/path.txt       Relative paths work too
+
+/ Commands (Slash commands):
+  Invoke skills explicitly:
+  • /help                      Show available commands and skills
+  • /clear                     Clear thread history
+  • /skill-name <args>         Run a specific skill (e.g., /git-commit, /summarize-file)
+
+File Attachments:
+  • PDFs: Converted to markdown with Microsoft MarkItDown (saves tokens vs raw text)
+  • Images: Passed through to cursor-agent (best effort image support)
+  • Text files: Included with size caps (50KB default)
+  • Binary files: Skipped with a note
+
+  Requires MarkItDown for PDFs: pip install markitdown[pdf]
 
 Build Execution Modes / Modos de ejecución de builds:
   • CLI (terminal):
@@ -49,8 +71,11 @@ Build Execution Modes / Modos de ejecución de builds:
 
 Examples:
   npm run agent -- "summarize MEMORY.md"
-  npm run agent -- --interactive
-  npm run agent -- --debug "explain error in logs"
+  npm run agent -- "@src/core/agent-turn.ts explain this file"
+  npm run agent -- "/git-commit for the recent changes"
+  npm run agent -- --attach report.pdf "summarize this PDF"
+  npm run agent -- "@data.csv compare with @report.pdf"
+  npm run agent -- "/help"
 `);
 }
 
@@ -69,7 +94,28 @@ async function main(): Promise<void> {
   const args = stripDebugFlags(rawArgs);
 
   const isInteractive = args.includes('--interactive') || args.includes('-i');
-  const isOneShotWithPrompt = args.length > 0 && !isInteractive;
+  
+  const attachments: string[] = [];
+  const filteredArgs: string[] = [];
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (arg === '--attach' && i + 1 < args.length) {
+      i += 1;
+      const nextArg = args[i];
+      if (nextArg !== undefined) {
+        attachments.push(nextArg);
+      }
+      i += 1;
+    } else if (arg !== '-i' && arg !== '--interactive' && arg !== undefined) {
+      filteredArgs.push(arg);
+      i += 1;
+    } else {
+      i += 1;
+    }
+  }
+  
+  const isOneShotWithPrompt = filteredArgs.length > 0 && !isInteractive;
 
   if (isOneShotWithPrompt) {
     ensureDefaultConfig(repoRoot);
@@ -83,11 +129,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const userPrompt = await readUserPrompt(args);
+  const userPrompt = await readUserPrompt(filteredArgs);
 
   if (userPrompt.trim() === '') {
     throw new Error(
-      'Empty prompt. Usage: npm run agent -- [--debug] "<prompt>"',
+      'Empty prompt. Usage: npm run agent -- [--debug] [--attach <file>] "<prompt>"',
     );
   }
 
@@ -97,6 +143,7 @@ async function main(): Promise<void> {
     userPrompt,
     debug,
     stream: true,
+    ...(attachments.length > 0 ? { attachments } : {}),
     onAssistantDelta: withoutSegmentRecaps((text) => {
       liveReply.pushDelta(text);
     }),
