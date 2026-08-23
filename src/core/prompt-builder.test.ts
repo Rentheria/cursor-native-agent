@@ -32,59 +32,6 @@ describe('assemblePrompt', () => {
     assert.match(assembled.finalPrompt, /Draft a commit for the skills loader/);
   });
 
-  it('añade_constraint_crítico_cuando_stage_pitch_está_activo', () => {
-    const stagePitchSkill: SkillDocument = {
-      name: 'stage-pitch',
-      description: 'pitch',
-      triggers: ['pitch', 'qué hace este repo'],
-      body: 'Give a 30-second pitch.',
-      filePath: '/tmp/stage-pitch.md',
-    };
-    const memory: MemoryLoadResult = {
-      indexMarkdown: '- README',
-      indexEntries: [],
-      details: [],
-    };
-
-    const assembled = assemblePrompt({
-      userPrompt: 'qué hace este repo',
-      matchedSkills: [stagePitchSkill],
-      memory,
-      repoRoot: '/workspace',
-    });
-
-    assert.match(assembled.finalPrompt, /CRITICAL OUTPUT CONSTRAINT/);
-    assert.match(assembled.finalPrompt, /30-second stage pitch/);
-    assert.match(assembled.finalPrompt, /EXACTLY three beats/);
-    assert.match(assembled.finalPrompt, /≤12 lines total/);
-    assert.match(assembled.finalPrompt, /Hook.*Proof.*Close/s);
-  });
-
-  it('no_añade_constraint_cuando_stage_pitch_no_está_activo', () => {
-    const otherSkill: SkillDocument = {
-      name: 'git-commit',
-      description: 'commits',
-      triggers: ['commit'],
-      body: 'Do commits.',
-      filePath: '/tmp/git-commit.md',
-    };
-    const memory: MemoryLoadResult = {
-      indexMarkdown: '- README',
-      indexEntries: [],
-      details: [],
-    };
-
-    const assembled = assemblePrompt({
-      userPrompt: 'draft a commit',
-      matchedSkills: [otherSkill],
-      memory,
-      repoRoot: '/workspace',
-    });
-
-    assert.ok(!assembled.finalPrompt.includes('CRITICAL OUTPUT CONSTRAINT'));
-    assert.ok(!assembled.finalPrompt.includes('30-second stage pitch'));
-  });
-
   it('funciona_cuando_no_hay_skills_activos', () => {
     const memory: MemoryLoadResult = {
       indexMarkdown: '- README',

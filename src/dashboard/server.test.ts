@@ -50,7 +50,7 @@ describe('dashboard HTTP routes (read-only)', () => {
       `${JSON.stringify({
         ts: '2026-08-05T12:00:00.000Z',
         prompt: 'hola dashboard',
-        skillsMatched: ['stage-pitch'],
+        skillsMatched: ['summarize-file'],
         memory: { indexEntries: 2, loadedDetails: [] },
       })}\n`,
       'utf8',
@@ -132,7 +132,7 @@ describe('dashboard HTTP routes (read-only)', () => {
       turns: Array<{ prompt: string; skillsMatched: string[] }>;
     };
     assert.equal(agentBody.turns[0]?.prompt, 'hola dashboard');
-    assert.deepEqual(agentBody.turns[0]?.skillsMatched, ['stage-pitch']);
+    assert.deepEqual(agentBody.turns[0]?.skillsMatched, ['summarize-file']);
 
     const cron = await fetch(`${baseUrl}/api/cron`);
     assert.equal(cron.status, 200);

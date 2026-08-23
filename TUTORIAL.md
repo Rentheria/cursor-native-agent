@@ -244,8 +244,8 @@ fallback`. Desactiva el fallback con `CURSOR_NATIVE_AGENT_SEMANTIC_SKILLS=0`.
 ## Sobre el modelo y el billing
 
 - **Modelo por defecto:** **Composer 2.5 Fast** — el onboarding configura
-  `CURSOR_AGENT_MODEL=composer-2.5-fast` por default para tono consistente en el demo del
-  meetup (27-ago-2026). Si querés usar Auto (selección automática de modelo de Cursor),
+  `CURSOR_AGENT_MODEL=composer-2.5-fast` por default para tono consistente.
+  Si querés usar Auto (selección automática de modelo de Cursor),
   seteá `CURSOR_AGENT_MODEL=auto` en el shell o editalo en `.env`. Para otros modelos,
   exportá `CURSOR_AGENT_MODEL=<id>`. Lista de IDs: `cursor-agent models`.
 - **Billing:** el uso corre en tu cuenta/subscripción de Cursor. No es un
@@ -286,8 +286,7 @@ propia máquina (tu cuenta Cursor, tu billing). No es SaaS multi-tenant.
   obligatoria).
 
 No expongas el puerto del dashboard a internet sin autenticación adicional.
-El meetup es contexto histórico (footnote); el framing es agente personal
-localhost.
+Este es un **agente personal localhost**, no un producto SaaS multi-tenant.
 
 ## Comandos principales
 
@@ -463,6 +462,6 @@ CURSOR_AGENT_BIN_PATH=/home/you/.local/bin/cursor-agent
 
 ## Qué no hace este tutorial
 
-No sustituye `README.md` / `ARCHITECTURE.md`. No cubre el pitch de 20 min
-(skills `stage-pitch` / `code-spotlight`). Si algo truena distinto a los tres
+No sustituye `README.md` / `ARCHITECTURE.md`. No cubre la presentación técnica
+de 20 minutos (skill `code-spotlight`). Si algo truena distinto a los tres
 casos de arriba, anota el error exacto antes de “arreglar a ciegas”.

@@ -9,10 +9,10 @@ billing). El cerebro es `cursor-agent` (CLI de Cursor); este paquete TypeScript
 solo arma el contexto (skills + memoria) y delega todo el razonamiento.
 
 **Modelo por defecto:** **Composer 2.5 Fast** — pinneado en `.env.example` vía
-`CURSOR_AGENT_MODEL=composer-2.5-fast` para tono consistente en el demo del
-meetup (27-ago-2026). Quitá esa línea, seteala a `auto`, o exportá tu propio
-modelo con `CURSOR_AGENT_MODEL=<id>` (correlo con `cursor-agent models` para
-ver IDs disponibles) — si está vacía o ausente, cursor-agent usa Auto.
+`CURSOR_AGENT_MODEL=composer-2.5-fast` para tono consistente. Quitá esa línea,
+seteala a `auto`, o exportá tu propio modelo con `CURSOR_AGENT_MODEL=<id>`
+(correlo con `cursor-agent models` para ver IDs disponibles) — si está vacía o
+ausente, cursor-agent usa Auto.
 
 **Cómo empezar en 3 pasos:**
 
@@ -35,13 +35,6 @@ CLI que vive fuera del IDE. En el IDE trabajas en un repo; esto es el agente
 como su propia cosa, autenticado como tú, con markdown skills + memoria lazy +
 opcional Telegram/cron/dashboard.
 
-## Origen y demo
-
-Este repo nació como demo pública para el Cursor Meetup GDL del 27-ago-2026,
-pero funciona como agente general clonado en cualquier repo.
-
-Checklist del talk: [DEMO-CHECKLIST.md](./DEMO-CHECKLIST.md)
-
 ## Para uso personal / seguridad
 
 Este es un **agente personal download-and-run**: cada persona lo corre en su
@@ -63,8 +56,7 @@ No expongas el puerto del dashboard a internet sin autenticación adicional.
 Barra de seguridad: suficientemente seguro para que extraños dejen
 dashboard/Telegram/cron encendidos diariamente.
 
-El meetup es contexto histórico (footnote); el framing es agente personal
-localhost.
+Este es un **agente personal localhost**, no un producto SaaS multi-tenant.
 
 ## Cursor Plugin (local)
 
@@ -280,10 +272,9 @@ npm run agent -- "explica este error: TypeError: Cannot read properties of undef
 npm run agent -- "propón un mensaje de commit Conventional Commits para los cambios actuales"
 
 # Dispara skill remember (memoria que se escribe sola; stderr muestra [memory] …)
-npm run agent -- "recuerda esto: en demos de meetup prefiero asiento en primera fila"
+npm run agent -- "recuerda esto: mi editor preferido es Neovim"
 
-# Skills de showcase (demo en vivo)
-npm run agent -- "dame un stage pitch de este repo"
+# Skill de showcase
 npm run agent -- "spotlight src/orchestration/cron-tick.ts"
 ```
 
@@ -837,7 +828,7 @@ src/loaders/        lectura de skills y memoria (keywords + semántica)
 src/orchestration/  cron tick (finding demoable) y dispatch de workers
 src/dashboard/      servidor HTTP read-only (HTML + parsers de logs)
 src/lib/            tipos, constantes, embeddings locales (TF-IDF)
-skills/*.md         skills de ejemplo + showcase (stage-pitch, code-spotlight, …)
+skills/*.md         skills de ejemplo + showcase (code-spotlight, git-commit, remember, …)
 MEMORY.md           índice siempre cargado
 memory/*.md         detalle lazy por keyword/semántica (también vía skill remember)
 ```
@@ -919,6 +910,6 @@ npm test                      # node:test en serie (--test-concurrency=1)
 
 ---
 
-**Nota sobre el origen:** Este repo se creó para el Cursor Meetup GDL del
-27-ago-2026 como demo en vivo, pero funciona como agente general clonado en
-cualquier proyecto.
+**Nota sobre el origen:** Este proyecto nació como demo pública (Cursor Meetup GDL,
+agosto 2026) y ahora funciona como agente personal general. Clonalo, personalizá
+las skills/memoria, y corre tu agente en tu cuenta de Cursor.
