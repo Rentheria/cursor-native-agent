@@ -105,11 +105,6 @@ No hace falta tocar TypeScript para cambiar el comportamiento del agente.
    - Windows PowerShell: `irm 'https://cursor.com/install?win32=true' | iex`
    - Docs: [cursor.com/docs/cli/installation](https://cursor.com/docs/cli/installation)
 3. **Login:** `cursor-agent login` (abre navegador)
-4. **(Opcional) MarkItDown para PDFs:** Para adjuntar archivos PDF, instala:
-   ```bash
-   pip install markitdown[pdf]
-   ```
-   MarkItDown convierte PDFs a markdown, ahorrando tokens vs texto plano o imágenes OCR.
 
 ### Setup en un comando
 
@@ -118,7 +113,7 @@ No hace falta tocar TypeScript para cambiar el comportamiento del agente.
 git clone https://github.com/Rentheria/cursor-native-agent.git
 cd cursor-native-agent
 
-# 2. Instalar y configurar (chequea deps + cursor-agent + crea .env y workspace/)
+# 2. Instalar y configurar (chequea deps + cursor-agent + crea .env y workspace/ + instala MarkItDown)
 #    Te pregunta dónde querés el workspace (Auto = <repo>/workspace, Personalizado = path absoluto)
 npm run setup
 
@@ -130,7 +125,10 @@ npm run cron:install
 ```
 
 `npm run setup` crea `.env` con defaults seguros (modelo Composer 2.5 Fast,
-Telegram omitido). Si corrés con TTY, te pregunta por el workspace path
+Telegram omitido) e intenta instalar **MarkItDown automáticamente** para soporte
+de PDFs (requiere Python + pip). Si Python no está disponible, muestra
+instrucciones claras y continúa sin fallar — el agente funciona sin PDFs.
+Si corrés con TTY, te pregunta por el workspace path
 (Auto = `<repo>/workspace`, Personalizado = path absoluto o relativo);
 no-TTY usa Auto silenciosamente.
 
@@ -210,12 +208,12 @@ npm run agent -- "@screenshot.png describe esta imagen"
 
 | Tipo | Manejo | Requisitos |
 |---|---|---|
-| **PDF** (`.pdf`) | Convertido a markdown con MarkItDown (ahorra tokens vs OCR/raw) | `pip install markitdown[pdf]` |
+| **PDF** (`.pdf`) | Convertido a markdown con MarkItDown (ahorra tokens vs OCR/raw) | Instalado automáticamente por `npm run setup` |
 | **Imágenes** (`.jpg`, `.png`, `.gif`, `.webp`) | Pasados a cursor-agent (mejor esfuerzo, depende del modelo) | — |
 | **Texto** (`.txt`, `.md`, `.json`, `.csv`, etc.) | Contenido incluido con límite de 50KB | — |
 | **Binarios** (otros) | Omitidos con nota | — |
 
-**Por qué MarkItDown para PDFs:** Los PDFs pueden ser enormes (cientos de miles de tokens si se extraen como texto plano o con OCR). MarkItDown genera markdown limpio y estructurado que es más compacto y fácil de procesar para el modelo. El límite por defecto es 100KB de markdown; si se excede, se trunca con nota.
+**Por qué MarkItDown para PDFs:** Los PDFs pueden ser enormes (cientos de miles de tokens si se extraen como texto plano o con OCR). MarkItDown genera markdown limpio y estructurado que es más compacto y fácil de procesar para el modelo. El límite por defecto es 100KB de markdown; si se excede, se trunca con nota. `npm run setup` instala MarkItDown automáticamente (requiere Python + pip); si no está disponible, el agente funciona sin PDFs.
 
 #### Comandos slash (nuevo)
 
