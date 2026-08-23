@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Native Cursor agent wrapper: skills + markdown memory orchestration around cursor-agent",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20"
