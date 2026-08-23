@@ -80,17 +80,18 @@ export function renderChatShell(options: {
         <span class="meta">chat · ${escapeHtml(options.generatedAt)}</span>
       </div>
       <nav class="sidebar-nav" aria-label="Paneles">
-        <button type="button" class="side-tab is-active" data-panel="agent">Turnos</button>
-        <button type="button" class="side-tab" data-panel="threads">Hilos</button>
+        <button type="button" class="side-tab is-active" data-panel="threads">Hilos</button>
+        <button type="button" class="side-tab" data-panel="agent">Turnos</button>
         <button type="button" class="side-tab" data-panel="cron">Cron</button>
         <button type="button" class="side-tab" data-panel="memory">Memoria</button>
       </nav>
       <div class="sidebar-panels">
-        <div class="side-panel is-active" data-panel="agent">${options.agentSection}</div>
-        <div class="side-panel" data-panel="threads">
-          <button type="button" class="button" id="new-thread-btn">Nueva conversación</button>
+        <div class="side-panel is-active" data-panel="threads">
+          <p class="panel-hint">Conversaciones del chat</p>
+          <button type="button" class="button" id="new-thread-btn-sidebar">Nueva conversación</button>
           <div id="threads-list-panel"></div>
         </div>
+        <div class="side-panel" data-panel="agent">${options.agentSection}</div>
         <div class="side-panel" data-panel="cron">${options.cronSection}</div>
         <div class="side-panel" data-panel="memory">${options.memorySection}</div>
       </div>
@@ -100,15 +101,16 @@ export function renderChatShell(options: {
         <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true">Paneles</button>
         <div style="flex: 1;">
           <h1>Chat</h1>
-          <p class="chat-sub">POST /api/chat · SSE · mismo pipeline que <span class="mono">npm run agent</span></p>
+          <p class="chat-sub" id="chat-thread-indicator">Sin hilo activo</p>
         </div>
+        <button type="button" class="button-new-thread" id="new-thread-btn-header">Nueva conversación</button>
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">
           <span class="theme-toggle-icon">◐</span>
           <span class="theme-toggle-label">Tema</span>
         </button>
       </header>
       <div class="info-banner" role="status">
-        Confirmar antes de escribir en el workspace · --trust · sesión local en <span class="mono">127.0.0.1</span> (cookie; Desbloquear solo si borraste cookies)
+        POST /api/chat · SSE · mismo pipeline que <span class="mono">npm run agent</span> · Confirmar antes de escribir en el workspace · --trust · sesión local en <span class="mono">127.0.0.1</span>
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
         <div class="chat-empty" id="chat-empty">

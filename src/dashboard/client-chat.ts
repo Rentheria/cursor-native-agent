@@ -24,10 +24,32 @@ export function chatClientScript(): string {
   var empty = document.getElementById('chat-empty');
   var sendBtn = document.getElementById('chat-send');
   var sidebarToggle = document.getElementById('sidebar-toggle');
+  var threadIndicator = document.getElementById('chat-thread-indicator');
   if (!form || !input || !log || !sendBtn) return;
 
   var currentContext = null;
   var currentThreadId = localStorage.getItem('currentThreadId') || null;
+  var currentThreadTitle = null;
+
+  function updateThreadIndicator() {
+    if (!threadIndicator) return;
+    if (currentThreadId && currentThreadTitle) {
+      threadIndicator.textContent = currentThreadTitle;
+    } else if (currentThreadId) {
+      threadIndicator.textContent = 'Hilo activo (sin título)';
+    } else {
+      threadIndicator.textContent = 'Sin hilo activo';
+    }
+  }
+
+  function switchToThreadsPanel() {
+    document.querySelectorAll('.side-tab').forEach(function (el) {
+      el.classList.toggle('is-active', el.getAttribute('data-panel') === 'threads');
+    });
+    document.querySelectorAll('.side-panel').forEach(function (el) {
+      el.classList.toggle('is-active', el.getAttribute('data-panel') === 'threads');
+    });
+  }
 
   function getToken() {
     return sessionStorage.getItem(TOKEN_KEY);
@@ -416,6 +438,7 @@ export function chatClientScript(): string {
                 if (payload.threadId) {
                   currentThreadId = payload.threadId;
                   localStorage.setItem('currentThreadId', currentThreadId);
+                  switchToThreadsPanel();
                   loadThreads();
                 } else {
                   currentContext = { userPrompt: prompt, assistantReply: finalText };
@@ -455,6 +478,10 @@ export function chatClientScript(): string {
         var html = '<div class="thread-list">';
         data.threads.forEach(function (t) {
           var active = currentThreadId === t.id ? ' is-active' : '';
+          if (currentThreadId === t.id) {
+            currentThreadTitle = t.title || 'Sin título';
+            updateThreadIndicator();
+          }
           var title = t.title || 'Sin título';
           if (title.length > 50) title = title.slice(0, 47) + '...';
           var msgCount = t.messageCount || 0;
@@ -522,6 +549,10 @@ export function chatClientScript(): string {
         return res.json();
       })
       .then(function () {
+        if (currentThreadId === threadId) {
+          currentThreadTitle = newTitle;
+          updateThreadIndicator();
+        }
         loadThreads();
       })
       .catch(function (err) {
@@ -539,12 +570,14 @@ export function chatClientScript(): string {
       .then(function () {
         if (currentThreadId === threadId) {
           currentThreadId = null;
+          currentThreadTitle = null;
           currentContext = null;
           localStorage.removeItem('currentThreadId');
           log.innerHTML = '';
           if (empty && !empty.parentNode) {
             log.appendChild(empty);
           }
+          updateThreadIndicator();
         }
         loadThreads();
       })
@@ -560,10 +593,12 @@ export function chatClientScript(): string {
       .then(function (data) {
         if (!data.thread) return;
         currentThreadId = threadId;
+        currentThreadTitle = data.thread.title || 'Sin título';
         localStorage.setItem('currentThreadId', threadId);
         currentContext = null;
         log.innerHTML = '';
         hideEmpty();
+        updateThreadIndicator();
         
         data.thread.messages.forEach(function (msg) {
           if (msg.role === 'assistant') {
@@ -590,22 +625,31 @@ export function chatClientScript(): string {
       });
   }
 
-  var newThreadBtn = document.getElementById('new-thread-btn');
-  if (newThreadBtn) {
-    newThreadBtn.addEventListener('click', function () {
-      currentThreadId = null;
-      currentContext = null;
-      localStorage.removeItem('currentThreadId');
-      log.innerHTML = '';
-      if (empty && !empty.parentNode) {
-        log.appendChild(empty);
-      }
-      loadThreads();
-      input.focus();
-    });
+  function startNewThread() {
+    currentThreadId = null;
+    currentThreadTitle = null;
+    currentContext = null;
+    localStorage.removeItem('currentThreadId');
+    log.innerHTML = '';
+    if (empty && !empty.parentNode) {
+      log.appendChild(empty);
+    }
+    updateThreadIndicator();
+    loadThreads();
+    input.focus();
+  }
+
+  var newThreadBtnHeader = document.getElementById('new-thread-btn-header');
+  var newThreadBtnSidebar = document.getElementById('new-thread-btn-sidebar');
+  if (newThreadBtnHeader) {
+    newThreadBtnHeader.addEventListener('click', startNewThread);
+  }
+  if (newThreadBtnSidebar) {
+    newThreadBtnSidebar.addEventListener('click', startNewThread);
   }
 
   initThemeToggle();
   loadThreads();
+  updateThreadIndicator();
 })();`;
 }
