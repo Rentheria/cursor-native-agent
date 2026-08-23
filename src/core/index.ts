@@ -38,6 +38,15 @@ Flags:
   --yes, -y           Skip onboarding prompts (use defaults)
   --help, -h          Show this help
 
+Build Execution Modes / Modos de ejecución de builds:
+  • CLI (terminal):
+    → Builds run with --force immediately (direct)
+    → Always uses --trust for cursor-agent tooling
+  • Dashboard/Telegram (safeMode):
+    → Builds require user confirmation: Confirmar/Cancelar (or /ok /no)
+    → --force applied only after explicit confirmation
+    → Always uses --trust for cursor-agent tooling
+
 Examples:
   npm run agent -- "summarize MEMORY.md"
   npm run agent -- --interactive

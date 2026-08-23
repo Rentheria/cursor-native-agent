@@ -80,10 +80,10 @@ function isSlashCommand(text: string): boolean {
 function getSlashCommandReply(command: string): string {
   const lower = command.toLowerCase().trim();
   if (lower.startsWith('/ok')) {
-    return 'No pending build confirmation found (it may have expired). Please send your build request again.';
+    return 'No hay confirmación pendiente (pudo haber expirado). Enviá tu solicitud de build nuevamente.';
   }
   if (lower.startsWith('/no')) {
-    return 'No pending confirmation to cancel. Send a build request to get started.';
+    return 'No hay confirmación pendiente para cancelar. Enviá una solicitud de build para empezar.';
   }
   if (lower.startsWith('/start')) {
     return 'Conversación iniciada. Los builds piden Confirmar antes de escribir. Este chat está en allowlist. / Conversation started. Builds ask for confirmation before writing. This chat is allowlisted.';
@@ -223,7 +223,7 @@ export async function dispatchInboundMessage(params: {
       );
       await api.sendMessage({
         chatId: inbound.chatId,
-        text: 'Build confirmation cancelled. You can send a new request.',
+        text: 'Confirmación cancelada. Podés enviar una nueva solicitud.',
       });
       return;
     }
