@@ -413,6 +413,45 @@ export async function handleRequest(
       return;
     }
 
+    if (pathname.startsWith('/fonts/')) {
+      const fontFileName = pathname.slice('/fonts/'.length);
+      if (!/^[a-z0-9-]+\.woff2$/.test(fontFileName)) {
+        sendJson(res, 400, {
+          error: 'invalid_font',
+          message: 'Invalid font file name',
+        }, false, chatEnabled);
+        return;
+      }
+      
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const fontPath = path.join(__dirname, 'fonts', fontFileName);
+      
+      try {
+        const fontData = await readFile(fontPath);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'font/woff2');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        if (method === 'HEAD') {
+          res.setHeader('Content-Length', fontData.length);
+          res.end();
+        } else {
+          res.end(fontData);
+        }
+        return;
+      } catch (error: unknown) {
+        if (isEnoent(error)) {
+          sendJson(res, 404, {
+            error: 'not_found',
+            message: 'Font file not found',
+          }, false, chatEnabled);
+        } else {
+          throw error;
+        }
+        return;
+      }
+    }
+
     if (pathname === '/api/agent') {
       const snapshot = await loadDashboardSnapshot(options);
       sendJson(res, 200, { turns: snapshot.agentTurns }, method === 'HEAD', chatEnabled);
