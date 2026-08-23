@@ -23,6 +23,9 @@ export function chatClientScript(): string {
   var log = document.getElementById('chat-log');
   var empty = document.getElementById('chat-empty');
   var sendBtn = document.getElementById('chat-send');
+  var attachBtn = document.getElementById('attach-btn');
+  var attachContainer = document.getElementById('attach-container');
+  var attachList = document.getElementById('attach-list');
   var sidebarToggle = document.getElementById('sidebar-toggle');
   var threadIndicator = document.getElementById('chat-thread-indicator');
   if (!form || !input || !log || !sendBtn) return;
@@ -30,6 +33,7 @@ export function chatClientScript(): string {
   var currentContext = null;
   var currentThreadId = localStorage.getItem('currentThreadId') || null;
   var currentThreadTitle = null;
+  var attachments = [];
 
   function updateThreadIndicator() {
     if (!threadIndicator) return;
@@ -40,6 +44,53 @@ export function chatClientScript(): string {
     } else {
       threadIndicator.textContent = 'Sin hilo activo';
     }
+  }
+
+  function updateAttachUI() {
+    if (!attachContainer || !attachList) return;
+    if (attachments.length === 0) {
+      attachContainer.style.display = 'none';
+      return;
+    }
+    attachContainer.style.display = 'block';
+    attachList.innerHTML = '';
+    attachments.forEach(function (path, index) {
+      var item = document.createElement('div');
+      item.className = 'attach-item';
+      item.style.cssText = 'display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.5rem;background:var(--panel);border:1px solid var(--line);border-radius:0.4rem;margin:0.2rem;font-size:0.85rem;';
+      
+      var label = document.createElement('span');
+      label.textContent = path;
+      label.style.cssText = 'color:var(--ink);';
+      
+      var remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0;line-height:1;';
+      remove.setAttribute('aria-label', 'Eliminar adjunto');
+      remove.addEventListener('click', function () {
+        attachments.splice(index, 1);
+        updateAttachUI();
+      });
+      
+      item.appendChild(label);
+      item.appendChild(remove);
+      attachList.appendChild(item);
+    });
+  }
+
+  if (attachBtn) {
+    attachBtn.addEventListener('click', function () {
+      var path = prompt('Ruta del archivo a adjuntar (puede ser absoluta o relativa al repo):\\n\\nEjemplo: src/core/agent-turn.ts o @src/core/agent-turn.ts');
+      if (path) {
+        path = path.trim();
+        if (path.startsWith('@')) path = path.slice(1);
+        if (path && !attachments.includes(path)) {
+          attachments.push(path);
+          updateAttachUI();
+        }
+      }
+    });
   }
 
   function switchToThreadsPanel() {
@@ -296,6 +347,9 @@ export function chatClientScript(): string {
     input.disabled = true;
 
     var body = { prompt: prompt };
+    if (attachments.length > 0) {
+      body.attachments = attachments.slice();
+    }
     if (currentThreadId) {
       body.threadId = currentThreadId;
     } else if (currentContext) {
@@ -461,6 +515,8 @@ export function chatClientScript(): string {
       sendBtn.disabled = false;
       input.disabled = false;
       input.focus();
+      attachments = [];
+      updateAttachUI();
     });
   });
 

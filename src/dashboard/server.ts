@@ -48,6 +48,7 @@ export type ChatTurnRunner = (options: {
   readonly confirmedForce?: boolean;
   readonly context?: { userPrompt: string; assistantReply: string };
   readonly threadId?: string;
+  readonly attachments?: readonly string[];
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
 
@@ -748,13 +749,14 @@ async function handleChatPost(
   if (prompt === undefined) {
     sendJson(res, 400, {
       error: 'invalid_prompt',
-      message: 'Expected JSON body { "prompt": "<non-empty string>" }.',
+      message: 'Expected JSON body { "prompt": "<non-empty string>", "attachments": ["<path>", ...] }.',
     });
     return;
   }
 
   const context = extractChatContext(body);
   const threadId = extractThreadId(body);
+  const attachments = extractAttachments(body);
 
   // Check for confirmation commands
   const lowerPrompt = prompt.toLowerCase().trim();
@@ -780,6 +782,7 @@ async function handleChatPost(
         userPrompt: pendingPrompt,
         confirmedForce: true,
         ...(threadId !== undefined ? { threadId } : {}),
+        ...(attachments !== undefined ? { attachments } : {}),
         onAssistantDelta: withoutSegmentRecaps((text) => {
           writeSseEvent(res, { type: 'delta', text });
         }),
@@ -841,6 +844,7 @@ async function handleChatPost(
       userPrompt: prompt,
       ...(context !== undefined ? { context } : {}),
       ...(threadId !== undefined ? { threadId } : {}),
+      ...(attachments !== undefined ? { attachments } : {}),
       onAssistantDelta: withoutSegmentRecaps((text) => {
         writeSseEvent(res, { type: 'delta', text });
       }),
@@ -886,6 +890,7 @@ async function defaultChatTurnRunner(options: {
   readonly confirmedForce?: boolean;
   readonly context?: { userPrompt: string; assistantReply: string };
   readonly threadId?: string;
+  readonly attachments?: readonly string[];
   readonly onAssistantDelta?: (text: string) => void;
 }): Promise<AgentTurnResult> {
   // Pass context/threadId to agent-turn; it will prepend AFTER build-intent check
@@ -897,6 +902,7 @@ async function defaultChatTurnRunner(options: {
     ...(options.confirmedForce !== undefined ? { confirmedForce: options.confirmedForce } : {}),
     ...(options.context !== undefined ? { context: options.context } : {}),
     ...(options.threadId !== undefined ? { threadId: options.threadId } : {}),
+    ...(options.attachments !== undefined ? { attachments: options.attachments } : {}),
     ...(options.onAssistantDelta !== undefined
       ? { onAssistantDelta: options.onAssistantDelta }
       : {}),
@@ -920,6 +926,21 @@ function extractChatPrompt(body: unknown): string | undefined {
   }
   const trimmed = prompt.trim();
   return trimmed === '' ? undefined : trimmed;
+}
+
+function extractAttachments(body: unknown): string[] | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const attachments = (body as Record<string, unknown>)['attachments'];
+  if (attachments === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(attachments)) {
+    return undefined;
+  }
+  const paths = attachments.filter((item): item is string => typeof item === 'string');
+  return paths.length > 0 ? paths : undefined;
 }
 
 function extractChatContext(body: unknown): { userPrompt: string; assistantReply: string } | undefined {
