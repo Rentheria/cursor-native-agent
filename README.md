@@ -1,5 +1,9 @@
 # cursor-native-agent
 
+**Español** | [English](./README.en.md)
+
+---
+
 Agente personal construido **100% sobre `cursor-agent`** (Cursor CLI) — skills
 en markdown + memoria índice+detalle con carga lazy + loop autónomo por cron +
 orquestación multi-agente.
@@ -899,6 +903,16 @@ forkear:
 
 Ver también “Fuera de alcance” en `ARCHITECTURE.md` y [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
+
+## Licencia
+
+Este proyecto está bajo licencia [MIT](./LICENSE). Copyright (c) 2026 Alejandro Rentheria.
+
+
+## Licencia
+
+Este proyecto está bajo licencia [MIT](./LICENSE). Copyright (c) 2026 Alejandro Rentheria.
+
 ## Comandos de referencia
 
 ```bash
@@ -920,6 +934,6 @@ npm test                      # node:test en serie (--test-concurrency=1)
 
 ---
 
-**Nota sobre el origen:** Este proyecto nació como demo pública (Cursor Meetup GDL,
-agosto 2026) y ahora funciona como agente personal general. Clonalo, personalizá
-las skills/memoria, y corre tu agente en tu cuenta de Cursor.
+**Nota sobre el origen:** Este proyecto nació como demo para el Cursor Meetup GDL (agosto 2026)
+y ahora funciona como agente personal para uso diario. Clonalo, personalizá las skills/memoria,
+y corre tu agente en tu cuenta de Cursor. Licenciado bajo MIT — ver [LICENSE](./LICENSE).
