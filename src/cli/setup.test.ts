@@ -55,7 +55,7 @@ describe('setup CLI', () => {
   it('debería mostrar ayuda con --help', () => {
     const output = runSetup(['--help']);
     assert.match(output, /cursor-native-agent setup/);
-    assert.match(output, /One-command setup/);
+    assert.match(output, /Configuración rápida/);
     assert.match(output, /npm run setup/);
   });
 
@@ -138,7 +138,7 @@ describe('setup CLI', () => {
         },
       });
 
-      assert.match(result, /cursor-agent not found/);
+      assert.match(result, /cursor-agent no se encuentra/);
       assert.match(result, /cursor\.com\/install/);
       assert.match(result, /cursor-agent login/);
     } finally {
@@ -175,8 +175,8 @@ describe('setup CLI', () => {
       });
 
       assert.match(result, /cursor-agent found/);
-      assert.match(result, /Setup complete/);
-      assert.match(result, /Next steps/);
+      assert.match(result, /Configuración completa/);
+      assert.match(result, /Próximos pasos/);
     } finally {
       rmSync(tmpRepo, { recursive: true, force: true });
     }

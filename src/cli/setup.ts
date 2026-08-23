@@ -21,24 +21,24 @@ function showHelp(): void {
   console.log(`
 cursor-native-agent setup
 
-One-command setup after cloning the repo.
+Configuración rápida después de clonar el repo.
 
-Usage:
-  npm run setup              Install deps, check cursor-agent, create workspace/
-  npm run setup -- --help    Show this help
-  npm run setup -- -h        Alias for --help
+Uso:
+  npm run setup              Instala deps, verifica cursor-agent, crea workspace/
+  npm run setup -- --help    Muestra esta ayuda
+  npm run setup -- -h        Alias para --help
 
-What it does:
-  1. Install dependencies (npm install) if needed
-  2. Create .env with safe defaults (no Telegram, repo workspace/)
-  3. Check cursor-agent is available (PATH or CURSOR_AGENT_BIN_PATH)
-  4. Create workspace/ directory for user projects
-  5. Print next commands to run
+Qué hace:
+  1. Instala dependencias (npm install) si es necesario
+  2. Crea .env con valores seguros (sin Telegram, workspace/ en el repo)
+  3. Verifica que cursor-agent esté disponible (PATH o CURSOR_AGENT_BIN_PATH)
+  4. Crea el directorio workspace/ para proyectos de usuario
+  5. Muestra los próximos comandos a ejecutar
 
-Requirements:
+Requisitos:
   - Node.js ≥ 20
-  - cursor-agent CLI installed and logged in
-    Install: curl https://cursor.com/install -fsS | bash
+  - cursor-agent CLI instalado y autenticado
+    Instalar: curl https://cursor.com/install -fsS | bash
     Login: cursor-agent login
 `);
 }
@@ -175,11 +175,11 @@ function checkCursorAgent(): { found: boolean; binary?: string } {
 function printCursorAgentInstallInstructions(): void {
   const isWindows = process.platform === 'win32';
   console.error('');
-  console.error('❌ cursor-agent not found on PATH');
+  console.error('❌ cursor-agent no se encuentra en PATH');
   console.error('');
-  console.error('The cursor-agent CLI is required to run this project.');
+  console.error('El CLI cursor-agent es necesario para ejecutar este proyecto.');
   console.error('');
-  console.error('Install cursor-agent:');
+  console.error('Instalar cursor-agent:');
   if (isWindows) {
     console.error('  PowerShell:');
     console.error("    irm 'https://cursor.com/install?win32=true' | iex");
@@ -188,13 +188,13 @@ function printCursorAgentInstallInstructions(): void {
     console.error('    curl https://cursor.com/install -fsS | bash');
   }
   console.error('');
-  console.error('Then log in:');
+  console.error('Luego autenticarse:');
   console.error('  cursor-agent login');
   console.error('');
   console.error('Docs: https://cursor.com/docs/cli/installation');
   console.error('');
   console.error(
-    'If cursor-agent is installed but not on PATH, set CURSOR_AGENT_BIN_PATH:',
+    'Si cursor-agent está instalado pero no en PATH, configurá CURSOR_AGENT_BIN_PATH:',
   );
   console.error('  export CURSOR_AGENT_BIN_PATH=/path/to/cursor-agent');
   console.error('');
@@ -215,6 +215,14 @@ function resolveWorkspacePath(
 }
 
 /**
+ * Resolves the dashboard PORT from env or defaults to 3847.
+ */
+function resolveDashboardPort(env: NodeJS.ProcessEnv = process.env): string {
+  const port = env['PORT'];
+  return port !== undefined && port.trim() !== '' ? port.trim() : '3847';
+}
+
+/**
  * Ensures the resolved workspace directory exists.
  */
 function ensureWorkspaceDir(repoRoot: string): void {
@@ -230,8 +238,10 @@ function ensureWorkspaceDir(repoRoot: string): void {
 }
 
 function printNextSteps(): void {
+  const port = resolveDashboardPort();
+  
   console.error('');
-  console.error('✅ Setup complete!');
+  console.error('✅ ¡Configuración completa!');
   console.error('');
   console.error('🔐 Token de autenticación guardado en .env como DASHBOARD_TOKEN.');
   console.error('   (No se imprime en la terminal por seguridad)');
@@ -239,11 +249,11 @@ function printNextSteps(): void {
   console.error('Próximos pasos:');
   console.error('');
   console.error('  1. Probar el agente con un prompt:');
-  console.error('     npm run agent -- "summarize file MEMORY.md"');
+  console.error('     npm run agent -- "qué hace este repo"');
   console.error('');
   console.error('  2. Abrir el dashboard con chat:');
   console.error('     npm run dashboard');
-  console.error('     Luego abrí http://127.0.0.1:3847/');
+  console.error(`     Luego abrí http://127.0.0.1:${port}/`);
   console.error('     → Chat funciona directo; el token ya está en sesión');
   console.error('     → Si borraste cookies: pegá DASHBOARD_TOKEN desde .env en "Desbloquear"');
   console.error('');
@@ -257,7 +267,7 @@ function printNextSteps(): void {
   console.error('');
   printSecurityReminder();
   console.error('');
-  console.error('Más info: README.md y TUTORIAL.md');
+  console.error('Más detalles: TUTORIAL.md, DEMO-CHECKLIST.md y README.md');
   console.error('');
 }
 
