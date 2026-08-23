@@ -89,7 +89,7 @@ Framing: **agente personal download-and-run** (no SaaS). Meetup = lanzamiento, n
 | Fallo | Qué hacer |
 |-------|-----------|
 | Modelo lento / cuota | Quédate en pitch canned + mostrar código/skills; no improvisar builds largos |
-| Chat da 401 (cookies borradas) | F5 en dashboard; cookie session se regenera automáticamente |
+| Chat da 401 (cookies borradas) | F5; si sigue 401 → Desbloquear y pegar DASHBOARD_TOKEN desde .env |
 | Telegram mudo / **409 conflict** | **Matar otros pollers**; archivo `.telegram-poller.lock` protege pero procesos zombies pueden causar 409; un solo `npm run telegram` |
 | Confirmar no responde | Usar /ok en el chat; o demo solo dashboard |
 | Wi-Fi cae | CLI local + pitch canned; Telegram queda fuera |
