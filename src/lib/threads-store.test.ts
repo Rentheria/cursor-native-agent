@@ -436,3 +436,50 @@ describe('buildThreadContext con límite de caracteres', () => {
     }
   });
 });
+
+describe('deleteThread', () => {
+  it('elimina un thread existente', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { deleteThread } = await import('./threads-store.js');
+      const thread = await createThread(repoRoot, 'Mensaje a eliminar');
+      
+      const deleted = await deleteThread(repoRoot, thread.id);
+      assert.equal(deleted, true);
+      
+      const loaded = await loadThread(repoRoot, thread.id);
+      assert.equal(loaded, undefined);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('devuelve false si el thread no existe', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { deleteThread } = await import('./threads-store.js');
+      const deleted = await deleteThread(repoRoot, 'thread-no-existe');
+      assert.equal(deleted, false);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rechaza threadId con path traversal', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const { deleteThread } = await import('./threads-store.js');
+      
+      const malicious1 = await deleteThread(repoRoot, '../../../etc/passwd');
+      assert.equal(malicious1, false);
+      
+      const malicious2 = await deleteThread(repoRoot, 'thread-../other');
+      assert.equal(malicious2, false);
+      
+      const malicious3 = await deleteThread(repoRoot, 'thread\\windows');
+      assert.equal(malicious3, false);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});

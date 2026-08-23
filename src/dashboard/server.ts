@@ -21,6 +21,7 @@ import { maybeRunOnboarding } from '../lib/onboarding.js';
 import {
   loadThread,
   listThreads,
+  deleteThread,
 } from '../lib/threads-store.js';
 import { renderDashboardHtml, type DashboardSnapshot } from './html.js';
 import { renderMarkdown } from './markdown.js';
@@ -340,9 +341,33 @@ export async function handleRequest(
       sendJson(res, 200, { thread }, method === 'HEAD', chatEnabled);
       return;
     }
+    if (method === 'DELETE') {
+      const address = server.address();
+      const port = typeof address === 'object' && address !== null
+        ? address.port
+        : (options.listenPort ?? resolveDashboardPort());
+      if (!isOriginAllowed(req, port)) {
+        sendJson(res, 403, {
+          error: 'forbidden',
+          message: 'Cross-origin requests are not allowed.',
+        }, false, chatEnabled);
+        return;
+      }
+
+      const deleted = await deleteThread(options.repoRoot, threadId);
+      if (!deleted) {
+        sendJson(res, 404, {
+          error: 'not_found',
+          message: `Thread ${threadId} not found.`,
+        }, false, chatEnabled);
+        return;
+      }
+      sendJson(res, 200, { success: true }, false, chatEnabled);
+      return;
+    }
     sendJson(res, 405, {
       error: 'method_not_allowed',
-      message: `Use GET /api/threads/${threadId} to load a thread.`,
+      message: `Use GET /api/threads/${threadId} to load a thread or DELETE to remove it.`,
     }, false, chatEnabled);
     return;
   }
