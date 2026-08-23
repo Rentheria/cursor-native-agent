@@ -33,13 +33,15 @@ Qué hace:
   2. Crea .env con valores seguros (sin Telegram, workspace/ en el repo)
   3. Verifica que cursor-agent esté disponible (PATH o CURSOR_AGENT_BIN_PATH)
   4. Crea el directorio workspace/ para proyectos de usuario
-  5. Muestra los próximos comandos a ejecutar
+  5. Instala MarkItDown para soporte de PDFs (requiere Python + pip)
+  6. Muestra los próximos comandos a ejecutar
 
 Requisitos:
   - Node.js ≥ 20
   - cursor-agent CLI instalado y autenticado
     Instalar: curl https://cursor.com/install -fsS | bash
     Login: cursor-agent login
+  - Python + pip (opcional, para PDFs)
 `);
 }
 
@@ -283,6 +285,75 @@ function printSecurityReminder(): void {
   console.error('');
 }
 
+/**
+ * Attempts to detect Python and install MarkItDown for PDF support.
+ * Best-effort: logs warnings if Python/pip is missing but doesn't fail hard.
+ */
+function installMarkItDown(): void {
+  console.error('[setup] Installing MarkItDown for PDF support...');
+
+  let pythonBinary: string | undefined;
+
+  const candidates = ['python3', 'python'];
+  for (const candidate of candidates) {
+    try {
+      const version = execSync(`${candidate} --version`, {
+        stdio: 'pipe',
+        encoding: 'utf8',
+      });
+      if (typeof version === 'string' && version.trim() !== '') {
+        pythonBinary = candidate;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (pythonBinary === undefined) {
+    console.error('');
+    console.error('⚠️  Python no encontrado (probé python3 y python)');
+    console.error('');
+    console.error('MarkItDown requiere Python para convertir PDFs a markdown.');
+    console.error('El agente funcionará sin PDFs; la funcionalidad se degrada gracefully.');
+    console.error('');
+    console.error('Para instalar Python:');
+    console.error('  • Debian/Ubuntu: sudo apt install python3 python3-pip');
+    console.error('  • Fedora/RHEL: sudo dnf install python3 python3-pip');
+    console.error('  • macOS: brew install python3');
+    console.error('  • Windows: https://www.python.org/downloads/');
+    console.error('');
+    console.error('Después de instalar Python, corre manualmente:');
+    console.error(`  ${pythonBinary ?? 'python3'} -m pip install 'markitdown[pdf]'`);
+    console.error('');
+    return;
+  }
+
+  console.error(`[setup] Python encontrado: ${pythonBinary}`);
+
+  try {
+    console.error('[setup] Ejecutando: pip install markitdown[pdf]...');
+    execSync(`${pythonBinary} -m pip install 'markitdown[pdf]'`, {
+      stdio: 'inherit',
+      env: process.env,
+    });
+    console.error('[setup] ✓ MarkItDown instalado correctamente');
+  } catch (error) {
+    console.error('');
+    console.error('⚠️  No se pudo instalar MarkItDown automáticamente');
+    console.error('');
+    console.error('Error al ejecutar pip. Esto puede ocurrir si:');
+    console.error('  • pip no está instalado (instala python3-pip en tu sistema)');
+    console.error('  • necesitas permisos (probá con --user o un virtualenv)');
+    console.error('');
+    console.error('Para instalar manualmente:');
+    console.error(`  ${pythonBinary} -m pip install 'markitdown[pdf]' --user`);
+    console.error('');
+    console.error('El agente funcionará sin PDFs; la funcionalidad se degrada gracefully.');
+    console.error('');
+  }
+}
+
 async function runSetup(options: SetupOptions): Promise<void> {
   const { repoRoot } = options;
 
@@ -359,6 +430,8 @@ async function runSetup(options: SetupOptions): Promise<void> {
   );
 
   ensureWorkspaceDir(repoRoot);
+
+  installMarkItDown();
 
   printNextSteps();
 }
