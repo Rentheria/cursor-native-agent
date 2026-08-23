@@ -25,13 +25,17 @@ cursor-native-agent CLI
 Run the Cursor-native agent with skills + memory orchestration.
 
 Usage:
-  npm run agent -- "<prompt>"              Run one-shot agent turn
-  npm run agent -- --interactive           Start interactive REPL
-  npm run agent -- -i                      Alias for --interactive
-  npm run agent -- --debug "<prompt>"      Run with debug output
-  npm run agent -- --attach <file> "<prompt>"  Attach file(s) to prompt
-  npm run agent -- --help                  Show this help
-  npm run agent -- -h                      Alias for --help
+  cursor-native-agent "<prompt>"              Run one-shot agent turn
+  cursor-native-agent --interactive           Start interactive REPL
+  cursor-native-agent -i                      Alias for --interactive
+  cursor-native-agent --debug "<prompt>"      Run with debug output
+  cursor-native-agent --attach <file> "<prompt>"  Attach file(s) to prompt
+  cursor-native-agent --help                  Show this help
+  cursor-native-agent -h                      Alias for --help
+
+Alternative (from repo):
+  npm run agent -- "<prompt>"              Same as above
+  npm run agent -- --interactive           Same as above
 
 Flags:
   --interactive, -i   Interactive REPL mode (maintains thread history across sessions)
@@ -80,14 +84,14 @@ Build Execution Modes / Modos de ejecución de builds:
     → Always uses --trust for cursor-agent tooling
 
 Examples:
-  npm run agent -- "summarize MEMORY.md"
-  npm run agent -- "@src/core/agent-turn.ts explain this file"
-  npm run agent -- "/git-commit for the recent changes"
-  npm run agent -- --attach report.pdf "summarize this PDF"
-  npm run agent -- "@data.csv compare with @report.pdf"
-  npm run agent -- "/help"
-  npm run agent -- -i                          # Start interactive mode
-  npm run agent -- -i --attach doc.pdf         # Interactive with attachment
+  cursor-native-agent "summarize MEMORY.md"
+  cursor-native-agent "@src/core/agent-turn.ts explain this file"
+  cursor-native-agent "/git-commit for the recent changes"
+  cursor-native-agent --attach report.pdf "summarize this PDF"
+  cursor-native-agent "@data.csv compare with @report.pdf"
+  cursor-native-agent "/help"
+  cursor-native-agent -i                          # Start interactive mode
+  cursor-native-agent -i --attach doc.pdf         # Interactive with attachment
 `);
 }
 
