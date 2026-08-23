@@ -101,6 +101,18 @@ export class TelegramApiError extends Error {
 }
 
 /**
+ * Returns true if the error is a Telegram 409 Conflict (multiple getUpdates pollers).
+ * The error description typically contains "Conflict" or mentions another instance.
+ */
+export function isTelegramConflictError(error: unknown): boolean {
+  if (!(error instanceof TelegramApiError)) {
+    return false;
+  }
+  const desc = error.description.toLowerCase();
+  return desc.includes('conflict') || desc.includes('409');
+}
+
+/**
  * Reads `TELEGRAM_BOT_TOKEN` from the given env map. Throws a clear setup
  * message when missing — never invents or hardcodes a token.
  */
@@ -191,6 +203,17 @@ export class TelegramApi {
       body.text = params.text;
     }
     return await this.callApi<boolean>('answerCallbackQuery', body);
+  }
+
+  /**
+   * Deletes any active webhook for this bot, preparing it for long polling.
+   * Call this before starting getUpdates to clear leftover webhooks.
+   */
+  async deleteWebhook(dropPendingUpdates = false): Promise<boolean> {
+    const body: Record<string, unknown> = {
+      drop_pending_updates: dropPendingUpdates,
+    };
+    return await this.callApi<boolean>('deleteWebhook', body);
   }
 
   /**

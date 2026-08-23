@@ -22,9 +22,15 @@ import { createOrResetThread } from '../lib/threads-store.js';
 import {
   createTelegramApi,
   requireTelegramBotToken,
+  isTelegramConflictError,
   type TelegramApi,
   type InlineKeyboardMarkup,
 } from './telegram-api.js';
+import {
+  acquireTelegramLock,
+  releaseTelegramLock,
+  type TelegramLock,
+} from './telegram-lock.js';
 import {
   describeAllowlist,
   describeInboundSender,
@@ -472,6 +478,20 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
       if (isAborted(options.signal)) {
         break;
       }
+      
+      if (isTelegramConflictError(error)) {
+        console.error(
+          '[telegram] ⚠️ Conflicto detectado (HTTP 409): hay otro poller activo (otra instancia de npm run telegram u otro host con el mismo token).',
+        );
+        console.error('[telegram] Acciones: matar todas las instancias duplicadas; verificar que solo un proceso corra npm run telegram.');
+        console.error('[telegram] Esperando 12s antes de reintentar…');
+        await sleep(12000, options.signal);
+        if (!loop) {
+          throw error;
+        }
+        continue;
+      }
+      
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[telegram] getUpdates error: ${message}`);
       // Brief pause so a hard failure does not spin the CPU.
@@ -519,6 +539,16 @@ async function main(): Promise<void> {
   const allowlist = requireTelegramAllowlist(process.env, repoRoot);
   const api = createTelegramApi({ token });
 
+  let lock: TelegramLock | undefined;
+  try {
+    lock = await acquireTelegramLock({ repoRoot });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+    return;
+  }
+
   const controller = new AbortController();
   const onStop = (): void => {
     console.error('[telegram] Shutdown signal received…');
@@ -527,12 +557,29 @@ async function main(): Promise<void> {
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
 
-  await runTelegramBot({
-    repoRoot,
-    api,
-    allowlist,
-    signal: controller.signal,
-  });
+  try {
+    // Best-effort: delete any leftover webhook before starting long poll
+    try {
+      const deleted = await api.deleteWebhook(false);
+      if (deleted) {
+        console.error('[telegram] Webhook anterior eliminado; listo para long polling.');
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[telegram] Advertencia: no se pudo eliminar webhook (no fatal): ${message}`);
+    }
+
+    await runTelegramBot({
+      repoRoot,
+      api,
+      allowlist,
+      signal: controller.signal,
+    });
+  } finally {
+    if (lock !== undefined) {
+      await releaseTelegramLock(lock);
+    }
+  }
 }
 
 function resolveRepoRoot(): string {

@@ -11,6 +11,8 @@ workspace/
 !workspace/README.md
 # Conversation threads (private, not committed)
 threads/
+# Telegram poller lock
+.telegram-poller.lock
 .env
 .env.*
 !.env.example

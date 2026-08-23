@@ -5,6 +5,8 @@ import {
   chunkTelegramText,
   createTelegramApi,
   requireTelegramBotToken,
+  isTelegramConflictError,
+  TelegramApiError,
   TELEGRAM_BOT_TOKEN_ENV,
   type FetchLike,
   type TelegramUpdate,
@@ -263,6 +265,47 @@ describe('TelegramApi (fetch mockeado)', () => {
         return true;
       },
     );
+  });
+
+  it('deleteWebhook_debería_llamar_al_endpoint_correcto', async () => {
+    const calls: Array<{ url: string; body?: string }> = [];
+    const api = createTelegramApi({
+      token: 'TEST_TOKEN',
+      apiBase: 'https://telegram.test',
+      fetchFn: async (input, init) => {
+        const url = String(input);
+        calls.push({ url, body: String(init?.body ?? '') });
+        return jsonResponse({ ok: true, result: true });
+      },
+    });
+
+    const result = await api.deleteWebhook(false);
+    assert.equal(result, true);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]?.url ?? '', /deleteWebhook/);
+    assert.match(calls[0]?.body ?? '', /drop_pending_updates.*false/);
+  });
+});
+
+describe('isTelegramConflictError', () => {
+  it('debería_detectar_TelegramApiError_con_Conflict_en_description', () => {
+    const error = new TelegramApiError('getUpdates', 'Conflict: terminated by other getUpdates request');
+    assert.equal(isTelegramConflictError(error), true);
+  });
+
+  it('debería_detectar_TelegramApiError_con_409_en_description', () => {
+    const error = new TelegramApiError('getUpdates', '409: Conflict');
+    assert.equal(isTelegramConflictError(error), true);
+  });
+
+  it('no_debería_detectar_otros_errores', () => {
+    const error = new Error('Network error');
+    assert.equal(isTelegramConflictError(error), false);
+  });
+
+  it('no_debería_detectar_TelegramApiError_sin_Conflict', () => {
+    const error = new TelegramApiError('sendMessage', 'Bad Request: chat not found');
+    assert.equal(isTelegramConflictError(error), false);
   });
 });
 
