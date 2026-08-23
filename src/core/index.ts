@@ -55,6 +55,8 @@ Flags:
   • /help                      Show available commands and skills
   • /clear                     Clear thread history (start fresh conversation)
   • /threads                   List all threads
+  • /attach <ruta>             Add file(s) to session attachments (interactive mode only)
+  • /detach                    Clear session attachments (interactive mode only)
   • exit, .exit, /exit         Quit interactive mode
 
   Skill commands (passed to model with specific skill loaded):
@@ -68,7 +70,10 @@ File Attachments:
 
   Requires MarkItDown for PDFs: pip install markitdown[pdf]
   
-  In interactive mode: --attach flags apply to all turns in the session
+  In interactive mode: 
+  • --attach flags apply to all turns in the session
+  • Use /attach <ruta> mid-session to add more files
+  • Use /detach to clear session attachments
 
 Build Execution Modes / Modos de ejecución de builds:
   • CLI one-shot (terminal):
