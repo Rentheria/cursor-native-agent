@@ -126,7 +126,7 @@ export function renderChatShell(options: {
             <code>/help</code> · <code>/skill-name args</code>
             <br><br>
             <strong>📎 Adjuntar</strong>
-            Clic o arrastrá archivos (análisis local, sin subir a servidor externo)
+            Clic, arrastrá o pegá (Ctrl/Cmd+V) imágenes · análisis local, sin subir a servidor externo
           </p>
         </div>
       </div>
@@ -141,7 +141,7 @@ export function renderChatShell(options: {
         </div>
         <p class="composer-hint">
           Enter para enviar · Shift+Enter para nueva línea<br>
-          <span class="hint-muted">@ para archivos · / para comandos · 📎 para adjuntar (o arrastrá)</span>
+          <span class="hint-muted">@ para archivos · / para comandos · 📎 para adjuntar (arrastrá o Ctrl/Cmd+V)</span>
         </p>
       </form>
     </div>
