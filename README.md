@@ -689,6 +689,72 @@ CLI (`npm run agent`) conserva `--force` directo (el usuario ya tipeó el prompt
 
 Además, el dashboard aplica verificación de origen (solo `127.0.0.1`/`localhost`), cap de 256 KiB en el body (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas este puerto a internet sin autenticación adicional.**
 
+### Modo watch — desarrollo local sin reinicio (`npm run watch`)
+
+Monitorea cambios en el repo clonado localmente y recarga procesos automáticamente,
+**evitando el ciclo de "subir y bajar el proyecto"**. Editas archivos en tu clon
+local y el watch recoge los cambios al instante.
+
+```bash
+# Monitor básico (muestra notificaciones de cambios)
+npm run watch
+
+# Monitor + dashboard con hot-reload
+npm run watch:dashboard
+```
+
+**Archivos monitoreados:**
+
+- `src/**/*.ts` — Si el dashboard está activo, se reinicia automáticamente.
+- `skills/**/*.md` — Se recargan en el siguiente turno del agente (sin reinicio de procesos).
+- `memory/**/*.md` + `MEMORY.md` — Se recargan en el siguiente turno del agente (sin reinicio).
+- `.env` — Muestra nota de reinicio manual (cambios de config crítica no se aplican automáticamente).
+
+**Archivos ignorados:**
+
+- `node_modules/`, `logs/`, `.git/`, `dist/`, `workspace/`, `threads/`
+- Archivos de test (`*.test.ts`)
+- Lock files (`package-lock.json`)
+
+**Comportamiento:**
+
+- **Skills y memoria:** Los loaders (`src/loaders/`) leen desde disco en cada turno,
+  por lo que editar `skills/*.md`, `memory/*.md` o `MEMORY.md` **no requiere reinicio** —
+  el cambio se recoge en el siguiente `npm run agent` o mensaje de dashboard/Telegram.
+- **Dashboard server:** Si corres `npm run watch:dashboard`, el servidor se reinicia
+  automáticamente cuando cambias archivos en `src/dashboard/`, `src/core/`, `src/lib/`
+  o `src/loaders/`. Tus ediciones aparecen refrescando el navegador.
+- **Cambios en `.env`:** El watch **no** reinicia procesos automáticamente (para evitar
+  drops inesperados de conexiones/threads). Si cambias config crítica (modelo, tokens),
+  reinicia manualmente con Ctrl+C y `npm run watch:dashboard`.
+
+**Ejemplo de workflow:**
+
+```bash
+# Terminal 1: arranca watch + dashboard
+npm run watch:dashboard
+
+# Terminal 2: edita una skill
+echo '---
+name: nueva-skill
+description: Ejemplo
+triggers: ["ejemplo"]
+---
+
+Instrucciones de la skill.' > skills/nueva-skill.md
+
+# El watch detecta el cambio y loguea:
+# "✓ skills/nueva-skill.md modificado - se recargará en el siguiente turno"
+
+# Terminal 2: envía prompt que usa la skill
+npm run agent -- "dame un ejemplo"
+# La skill se carga automáticamente sin reiniciar nada
+```
+
+CLI (`npm run agent`) conserva `--force` directo (el usuario ya tipeó el prompt en su terminal). Cron usa `--mode ask` (nunca escribe).
+
+Además, el dashboard aplica verificación de origen (solo `127.0.0.1`/`localhost`), cap de 256 KiB en el body (413 si excede), y rate limit (un turno concurrente + 10/min → 429). **No expongas este puerto a internet sin autenticación adicional.**
+
 ## Arquitectura
 
 Flujo one-shot (alto nivel):
@@ -843,6 +909,8 @@ npm run cron:install          # instala cron job para ticks desatendidos (weekda
 npm run cron:uninstall        # desinstala cron job
 npm run telegram              # bot Telegram (requiere TELEGRAM_BOT_TOKEN)
 npm run dashboard             # observatorio HTTP + chat (PORT, default 3847)
+npm run watch                 # monitoreo local de cambios (sin procesos activos)
+npm run watch:dashboard       # monitoreo + dashboard server con hot-reload
 npm run onboard               # configuración interactiva (modelo, workspace, Telegram)
 npm run typecheck             # tsc --noEmit
 npm run build                 # tsc (compila a dist/)
