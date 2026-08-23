@@ -85,6 +85,8 @@ export function sharedStyles(): string {
       --shadow-md: 0 4px 6px -1px rgba(20, 20, 16, 0.1), 0 2px 4px -1px rgba(20, 20, 16, 0.06);
       --shadow-lg: 0 10px 15px -3px rgba(20, 20, 16, 0.1), 0 4px 6px -2px rgba(20, 20, 16, 0.05);
       --shadow-xl: 0 20px 25px -5px rgba(20, 20, 16, 0.1), 0 10px 10px -5px rgba(20, 20, 16, 0.04);
+      --glow: #e6e5e0;
+      --paper-mid: #faf9f6;
     }
     html[data-theme="dark"] {
       color-scheme: dark;
@@ -108,6 +110,8 @@ export function sharedStyles(): string {
       --modal-shadow: rgba(0, 0, 0, 0.7);
       --error-text: #f87171;
       --button-text: #141410;
+      --glow: #2a2a25;
+      --paper-mid: #1a1a18;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
@@ -132,6 +136,8 @@ export function sharedStyles(): string {
         --modal-shadow: rgba(0, 0, 0, 0.7);
         --error-text: #f87171;
         --button-text: #141410;
+        --glow: #2a2a25;
+        --paper-mid: #1a1a18;
       }
     }
     * { box-sizing: border-box; }
@@ -408,8 +414,8 @@ export function observeStyles(): string {
   return `
     body.mode-observe {
       background:
-        radial-gradient(ellipse 80% 50% at 15% -10%, #e6e5e0 0%, transparent 55%),
-        linear-gradient(180deg, var(--paper) 0%, #faf9f6 40%, var(--paper) 100%);
+        radial-gradient(ellipse 80% 50% at 15% -10%, var(--glow) 0%, transparent 55%),
+        linear-gradient(180deg, var(--paper) 0%, var(--paper-mid) 40%, var(--paper) 100%);
       min-height: 100vh;
     }
     header.top {
@@ -586,8 +592,8 @@ export function chatStyles(): string {
     body.mode-chat {
       overflow: hidden;
       background:
-        radial-gradient(ellipse 70% 45% at 20% -8%, #e6e5e0 0%, transparent 58%),
-        linear-gradient(165deg, var(--paper) 0%, #faf9f6 45%, var(--paper) 100%);
+        radial-gradient(ellipse 70% 45% at 20% -8%, var(--glow) 0%, transparent 58%),
+        linear-gradient(165deg, var(--paper) 0%, var(--paper-mid) 45%, var(--paper) 100%);
     }
     .app {
       display: grid;
@@ -620,6 +626,14 @@ export function chatStyles(): string {
       font-size: 0.72rem;
       color: var(--muted);
       letter-spacing: -0.01em;
+    }
+    html[data-theme="dark"] .sidebar-brand img {
+      filter: brightness(1.4) contrast(0.9);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .sidebar-brand img {
+        filter: brightness(1.4) contrast(0.9);
+      }
     }
     .sidebar-nav {
       display: grid;
@@ -674,8 +688,8 @@ export function chatStyles(): string {
       min-width: 0;
       min-height: 0;
       background:
-        radial-gradient(ellipse 65% 35% at 50% -3%, #e6e5e0 0%, transparent 65%),
-        linear-gradient(180deg, var(--paper) 0%, #faf9f6 100%);
+        radial-gradient(ellipse 65% 35% at 50% -3%, var(--glow) 0%, transparent 65%),
+        linear-gradient(180deg, var(--paper) 0%, var(--paper-mid) 100%);
     }
     .chat-top {
       display: flex;
@@ -761,6 +775,16 @@ export function chatStyles(): string {
       opacity: 0.04;
       pointer-events: none;
       z-index: -1;
+    }
+    html[data-theme="dark"] .chat-empty::before {
+      background-image: url('/static/cursor-mark-light.png');
+      opacity: 0.08;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .chat-empty::before {
+        background-image: url('/static/cursor-mark-light.png');
+        opacity: 0.08;
+      }
     }
     .chat-empty > p:first-child {
       font-size: 1.05rem;
