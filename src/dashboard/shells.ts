@@ -76,7 +76,10 @@ export function renderChatShell(options: {
   <div class="app">
     <aside class="sidebar" id="sidebar" aria-label="Observatorio">
       <div class="sidebar-brand">
-        <strong>cursor-native-agent</strong>
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <img src="/static/cursor-mark-3d.png" alt="" width="20" height="20" style="opacity: 0.95;" />
+          <strong>cursor-native-agent</strong>
+        </div>
         <span class="meta">chat · ${escapeHtml(options.generatedAt)}</span>
       </div>
       <nav class="sidebar-nav" aria-label="Paneles">
@@ -110,15 +113,20 @@ export function renderChatShell(options: {
         </button>
       </header>
       <div class="info-banner" role="status">
-        POST /api/chat · SSE · mismo pipeline que <span class="mono">npm run agent</span> · Confirmar antes de escribir en el workspace · --trust · sesión local en <span class="mono">127.0.0.1</span>
+        <span>POST /api/chat · SSE streaming · mismo pipeline que <span class="mono">npm run agent</span></span>
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
         <div class="chat-empty" id="chat-empty">
-          <p>Preguntale al agente lo que quieras.</p>
+          <p>Preguntale al agente lo que quieras</p>
           <p class="chat-empty-hint">
-            <strong>@ Menciones:</strong> <code>@src/file.ts</code> incluye archivos · <code>@folder/</code> lista directorios<br>
-            <strong>/ Comandos:</strong> <code>/help</code> · <code>/skill-name args</code><br>
-            <strong>📎 Adjuntar:</strong> Clic o arrastrá archivos (análisis local, sin subir a servidor externo)
+            <strong>@ Menciones</strong>
+            <code>@src/file.ts</code> incluye archivos · <code>@folder/</code> lista directorios
+            <br><br>
+            <strong>/ Comandos</strong>
+            <code>/help</code> · <code>/skill-name args</code>
+            <br><br>
+            <strong>📎 Adjuntar</strong>
+            Clic o arrastrá archivos (análisis local, sin subir a servidor externo)
           </p>
         </div>
       </div>

@@ -249,6 +249,8 @@ ${memoryItems}
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>cursor-native-agent — ${chatEnabled ? 'chat' : 'observar'}</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png" />
+  <link rel="apple-touch-icon" href="/static/favicon.png" />
   <script>
     (function() {
       var stored = localStorage.getItem('dashboard-theme');
