@@ -248,10 +248,16 @@ function printNextSteps(): void {
   console.error('🔐 Token de autenticación guardado en .env como DASHBOARD_TOKEN.');
   console.error('   (No se imprime en la terminal por seguridad)');
   console.error('');
+  console.error('💡 Instalar comando global (opcional):');
+  console.error('     npm link');
+  console.error('   Luego podés usar "cursor-native-agent" desde cualquier directorio.');
+  console.error('');
   console.error('Próximos pasos:');
   console.error('');
   console.error('  1. Probar el agente con un prompt:');
   console.error('     npm run agent -- "qué hace este repo"');
+  console.error('     o (si instalaste con npm link):');
+  console.error('     cursor-native-agent "qué hace este repo"');
   console.error('');
   console.error('  2. Abrir el dashboard con chat:');
   console.error('     npm run dashboard');

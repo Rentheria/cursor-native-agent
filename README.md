@@ -149,22 +149,30 @@ Telegram requiere config obligatoria (`TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_ALLOWED_CHAT_IDS`) — el bot falla cerrado sin esas vars. Configúralo
 con `npm run onboard` o exportando las vars directamente.
 
-Instalación global opcional (comando `cursor-native-agent` disponible en
+Instalación global opcional (comando `cursor-native-agent` disponible desde
 cualquier directorio):
 
 ```bash
-npm run build        # compila TypeScript a dist/
-npm install -g .
+npm link
+cursor-native-agent --help
+cursor-native-agent "qué hace este repo"
 cursor-native-agent --interactive
 ```
 
+No requiere compilar TypeScript — el comando usa `tsx` directamente sobre el
+código fuente. Para desinstalar: `npm unlink -g cursor-native-agent`.
+
 ## Uso
 
-### One-shot (`npm run agent`)
+### One-shot (`cursor-native-agent` o `npm run agent`)
 
 Un prompt, un armado de contexto, una llamada a `cursor-agent -p`, y listo.
 
 ```bash
+# Si instalaste con npm link:
+cursor-native-agent "resume en 3 bullets el archivo MEMORY.md"
+
+# Desde el repo (sin instalar):
 npm run agent -- "resume en 3 bullets el archivo MEMORY.md"
 ```
 
