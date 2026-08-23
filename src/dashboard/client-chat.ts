@@ -141,6 +141,31 @@ export function chatClientScript(): string {
     fileInput.value = '';
   });
 
+  input.addEventListener('paste', function(e) {
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    
+    var imageFiles = [];
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (item.type.indexOf('image/') === 0) {
+        e.preventDefault();
+        var file = item.getAsFile();
+        if (file) {
+          var timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\\.\\d+Z$/, '').replace('T', '-');
+          var extension = file.type.split('/')[1] || 'png';
+          var filename = 'paste-' + timestamp + '.' + extension;
+          var renamedFile = new File([file], filename, { type: file.type });
+          imageFiles.push(renamedFile);
+        }
+      }
+    }
+    
+    if (imageFiles.length > 0) {
+      handleFiles(imageFiles);
+    }
+  });
+
   var chatArea = document.getElementById('chat-area');
   if (chatArea) {
     chatArea.addEventListener('dragover', function(e) {
