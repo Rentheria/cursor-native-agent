@@ -197,7 +197,7 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
       <p class="source">${escapeHtml(snapshot.sources.agentPath)} · newest ${String(snapshot.agentTurns.length)}</p>
       ${
         snapshot.agentTurns.length === 0
-          ? '<p class="empty">Sin entradas en agent.ndjson todavía.</p>'
+          ? '<p class="empty">Sin turnos todavía. Envía un mensaje en el chat o ejecuta <span class="mono">npm run agent -- "tu prompt"</span>.</p>'
           : `<div class="turns-list">${agentRows}</div>`
       }
     </section>`;
@@ -209,7 +209,7 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
       <div class="findings">
         ${
           snapshot.cronFindings.length === 0
-            ? '<p class="empty">Sin bloques CRON FINDING parseados todavía.</p>'
+            ? '<p class="empty">Sin hallazgos todavía. Ejecuta <span class="mono">npm run cron</span> o <span class="mono">npm run cron:install</span> para habilitar el cron autónomo.</p>'
             : cronCards
         }
       </div>
@@ -301,7 +301,7 @@ function renderChatShell(options: {
     <aside class="sidebar" id="sidebar" aria-label="Observatory">
       <div class="sidebar-brand">
         <strong>cursor-native-agent</strong>
-        <span class="meta">observe · ${escapeHtml(options.generatedAt)}</span>
+        <span class="meta">chat · ${escapeHtml(options.generatedAt)}</span>
       </div>
       <nav class="sidebar-nav" aria-label="Panels">
         <button type="button" class="side-tab is-active" data-panel="agent">Turnos</button>
@@ -328,12 +328,12 @@ function renderChatShell(options: {
         </div>
       </header>
       <div class="info-banner" role="status">
-        Confirmar escribe archivos bajo workspace/ · modo seguro + trust · token requerido · solo <span class="mono">127.0.0.1</span>
+        Confirmar antes de escribir en el workspace · --trust · sesión local en <span class="mono">127.0.0.1</span> (cookie; Desbloquear solo si borraste cookies)
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite">
         <div class="chat-empty" id="chat-empty">
           <p>Preguntale al agente lo que quieras.</p>
-          <p class="chat-empty-hint">Por ejemplo: "qué hace este repo"</p>
+          <p class="chat-empty-hint">Por ejemplo: "qué hace este repo" o "dame el pitch de una línea"</p>
         </div>
       </div>
       <form class="composer" id="chat-form">
