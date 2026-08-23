@@ -14,7 +14,6 @@ export function assemblePrompt(params: {
   readonly attachments?: readonly PreparedAttachment[];
 }): AssembledPrompt {
   const { userPrompt, matchedSkills, memory, workspacePath, repoRoot, attachments } = params;
-  const hasStagePitch = matchedSkills.some((skill) => skill.name === 'stage-pitch');
   
   const sections: string[] = [
     '# Orchestrated context for cursor-agent',
@@ -40,20 +39,6 @@ export function assemblePrompt(params: {
     sections.push('When building projects or apps, scaffold them in the `workspace/` directory (not');
     sections.push('the wrapper repo root). That directory is gitignored and is the designated space');
     sections.push('for user-requested code.');
-    sections.push('');
-  }
-
-  if (hasStagePitch) {
-    sections.push('## CRITICAL OUTPUT CONSTRAINT (stage-pitch active)');
-    sections.push('');
-    sections.push('Your reply MUST be a 30-second stage pitch with EXACTLY three beats (≤12 lines total):');
-    sections.push('1. **Hook** — one sentence: what problem this solves');
-    sections.push('2. **Proof** — three concrete pieces the audience can see live');
-    sections.push('3. **Close** — one sentence inviting them to try the repo');
-    sections.push('');
-    sections.push('Use spoken cadence, prefer bullets, no essay format. Match the user language');
-    sections.push('(Spanish question → Spanish pitch, English → English). No invented features,');
-    sections.push('no absolute home paths, no personal names.');
     sections.push('');
   }
 

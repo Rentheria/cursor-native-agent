@@ -24,16 +24,14 @@ Pattern (design inspired by index+detail + loadable skills workspaces — not co
 5. **Cron** (`npm run cron` / `scripts/cron-tick.sh`) collects a real git trigger and
    calls `cursor-agent` headless (`--force --trust --mode ask`). Each tick prepends a
    scannable `=== CRON FINDING … ===` block to `logs/cron.log` (branch, latest, tree,
-   READY/DIRTY verdict, optional agent note) so a 30-second stage beat is just
+   READY/DIRTY verdict, optional agent note) so a 30-second overview is just
    `tail -n 20 logs/cron.log`. On hosts that install Node via nvm, the wrapper must
    load nvm + the CLI bin dir — cron's PATH is minimal.
-6. **Showcase skills** (`stage-pitch`, `code-spotlight`): short stage-ready formats
-   for live demos — not infrastructure.
+6. **Showcase skills** (`code-spotlight`): short format for code highlights.
 7. **Multi-agent** (`dispatchWorker`): intent only on two canonical phrases
    (`pídele a otro agente que…`, `delega esto a…`). Second `cursor-agent` process,
    log under `logs/workers/`, parent waits (Promise = notify) then runs another
    `cursor-agent` to report (sequential, not parallel; detached dispatch:
    log + wait + notify; single engine).
 
-Out of scope for the Meetup demo: multi-channel, dashboard, remote-host polish.
 Semantic memory (local embeddings) is implemented.

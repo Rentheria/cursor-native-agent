@@ -19,9 +19,8 @@ sub-agentes.
 dashboard/Telegram/cron encendidos para uso local diario — no hardening de
 internet público.
 
-**Origen:** demo para el Cursor Meetup GDL del **27-ago-2026**, pero funciona
-como agente general clonado en cualquier repo. El meetup es contexto histórico;
-el framing actual es agente personal localhost.
+**Origen:** originalmente creado como demo pública (Cursor Meetup GDL, agosto 2026),
+ahora funciona como agente personal general para cualquier usuario.
 
 ## Alcance implementado
 
@@ -164,7 +163,7 @@ de `--force`; cron usa `--mode ask` (nunca escribe).
 - **Threads persistentes** — conversaciones guardadas en disco (`threads/`,
   gitignored). Dashboard y Telegram mantienen contexto entre turnos; Telegram
   usa ID estable `telegram-chat-<chatId>`. CLI one-shot por defecto.
-- **Skills de showcase** — `stage-pitch.md`, `code-spotlight.md` para demos en vivo.
+- **Skills de showcase** — `code-spotlight.md` para spotlight de código.
 - **Instalación automática de cron** — `npm run cron:install` arma job de
   weekday check-only sin intervención manual del usuario.
 
@@ -217,7 +216,7 @@ Esta confirmación protege contra escrituras no intencionales sin bloquear el fl
 
 No hay fallback a otros CLIs (`aichat`, `copilot-cli`). Ventajas:
 - Motor único → comportamiento consistente entre canales.
-- Demo verificable del CLI de Cursor, que es el punto del meetup.
+- Demo verificable del CLI de Cursor.
 - Más fácil de diagnosticar: un solo path de ejecución, un solo log.
 
 ### ¿Por qué workspace en `<repo>/workspace/` en vez de `~/Documents`?
@@ -233,13 +232,12 @@ queda ahí. Ventajas:
 
 Simplicidad: un archivo JSON por thread, guardado en `threads/` (gitignored).
 No requiere setup de DB, no requiere migración de schema. Para uso local
-(cientos de threads, no millones) es suficiente y demoable en una charla sin
-explicar DB external.
+(cientos de threads, no millones) es suficiente y simple.
 
 ### ¿Por qué TF-IDF local en vez de embeddings cloud?
 
 Cero config: el agente corre out-of-the-box sin API keys de OpenAI/Cohere/etc.
-Para un demo de meetup (y uso personal) es suficiente. El punto de extensión
+Para uso personal es suficiente. El punto de extensión
 (`EMBEDDINGS_PROVIDER=custom` + módulo) permite swap transparente si el usuario
 quiere un provider remoto — el código del agente no cambia.
 
@@ -259,19 +257,17 @@ accidente (p. ej. si el usuario corre el agente en un directorio equivocado).
 La skill falla con mensaje claro si no hay `.git`, y el usuario hace `git init`
 a mano si de verdad quiere un repo nuevo.
 
-## Estado del proyecto (post-meetup)
+## Estado del proyecto
 
-El meetup del 27-ago-2026 fue el lanzamiento público. El repo funciona como
-agente personal para uso diario:
+Proyecto maduro y usable como agente personal para uso diario:
 
 - Todos los canales implementados (CLI, dashboard, Telegram, cron).
 - Threads persistentes, modo seguro con confirmación, fail-closed security.
 - Skills + memoria semántica local funcionan out-of-the-box.
 - Instalación en un comando (`npm run setup`).
 
-El framing es **agente personal localhost**, no "demo de meetup". El meetup es
-contexto histórico en el README; este doc de arquitectura refleja el estado
-actual como producto usable.
+El framing es **agente personal localhost**. Originó como demo pública
+(Cursor Meetup GDL, agosto 2026) y ahora funciona como producto general.
 
 ## Referencia de patrones implementados (diseño reusable)
 
