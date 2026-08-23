@@ -30,9 +30,9 @@ export function renderObserveShell(options: {
   <header class="top">
     <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
       <div style="flex: 1;">
-        <h1>cursor-native-agent · observe</h1>
-        <p>Read-only local dashboard. Shows recent agent turns, cron findings, and the MEMORY.md index. Does not run the agent or write files.</p>
-        <div class="meta">generated ${escapeHtml(options.generatedAt)} · refresh the page to reload</div>
+        <h1>cursor-native-agent · observar</h1>
+        <p>Dashboard local de solo lectura. Muestra turnos recientes del agente, hallazgos de cron y el índice MEMORY.md. No ejecuta el agente ni escribe archivos.</p>
+        <div class="meta">generado ${escapeHtml(options.generatedAt)} · recarga la página para actualizar</div>
       </div>
       <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">
         <span class="theme-toggle-icon">◐</span>
@@ -45,7 +45,7 @@ ${options.agentSection}
 ${options.cronSection}
 ${options.memorySection}
   </main>
-  <footer>GET only · no write routes · PORT via env</footer>
+  <footer>Solo GET · sin rutas de escritura · PORT vía env</footer>
   <script>
 ${observeClientScript()}
   </script>
@@ -74,12 +74,12 @@ export function renderChatShell(options: {
     </div>
   </div>
   <div class="app">
-    <aside class="sidebar" id="sidebar" aria-label="Observatory">
+    <aside class="sidebar" id="sidebar" aria-label="Observatorio">
       <div class="sidebar-brand">
         <strong>cursor-native-agent</strong>
         <span class="meta">chat · ${escapeHtml(options.generatedAt)}</span>
       </div>
-      <nav class="sidebar-nav" aria-label="Panels">
+      <nav class="sidebar-nav" aria-label="Paneles">
         <button type="button" class="side-tab is-active" data-panel="agent">Turnos</button>
         <button type="button" class="side-tab" data-panel="threads">Hilos</button>
         <button type="button" class="side-tab" data-panel="cron">Cron</button>

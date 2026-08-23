@@ -122,7 +122,7 @@ describe('dashboard HTTP routes (read-only)', () => {
     assert.match(html, /hola dashboard/);
     assert.match(html, /feat\/dashboard-web/);
     assert.match(html, /Agent architecture/);
-    assert.match(html, /read-only/i);
+    assert.match(html, /solo lectura/i);
   });
 
   it('debería_exponer_JSON_de_agent_cron_y_memory', async () => {

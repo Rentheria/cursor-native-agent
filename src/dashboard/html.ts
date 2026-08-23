@@ -198,7 +198,7 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
   const agentSection = `
     <section class="panel" aria-labelledby="agent-heading">
       <h2 id="agent-heading">Turnos del agente</h2>
-      <p class="source">${escapeHtml(snapshot.sources.agentPath)} · newest ${String(snapshot.agentTurns.length)}</p>
+      <p class="source">${escapeHtml(snapshot.sources.agentPath)} · más recientes ${String(snapshot.agentTurns.length)}</p>
       ${
         snapshot.agentTurns.length === 0
           ? '<p class="empty">Sin turnos todavía. Envía un mensaje en el chat o ejecuta <span class="mono">npm run agent -- "tu prompt"</span>.</p>'
@@ -209,7 +209,7 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
   const cronSection = `
     <section class="panel" aria-labelledby="cron-heading">
       <h2 id="cron-heading">Hallazgos de cron</h2>
-      <p class="source">${escapeHtml(snapshot.sources.cronPath)} · newest ${String(snapshot.cronFindings.length)}</p>
+      <p class="source">${escapeHtml(snapshot.sources.cronPath)} · más recientes ${String(snapshot.cronFindings.length)}</p>
       <div class="findings">
         ${
           snapshot.cronFindings.length === 0
@@ -222,7 +222,7 @@ export function renderDashboardHtml(snapshot: DashboardSnapshot): string {
   const memorySection = `
     <section class="panel" aria-labelledby="memory-heading">
       <h2 id="memory-heading">MEMORY.md index</h2>
-      <p class="source">${escapeHtml(snapshot.sources.memoryPath)} · ${String(snapshot.memoryEntries.length)} entr${snapshot.memoryEntries.length === 1 ? 'y' : 'ies'}</p>
+      <p class="source">${escapeHtml(snapshot.sources.memoryPath)} · ${String(snapshot.memoryEntries.length)} entrada${snapshot.memoryEntries.length === 1 ? '' : 's'}</p>
       <ul class="memory-list">
 ${memoryItems}
       </ul>
@@ -247,7 +247,7 @@ ${memoryItems}
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>cursor-native-agent — ${chatEnabled ? 'chat' : 'observe'}</title>
+  <title>cursor-native-agent — ${chatEnabled ? 'chat' : 'observar'}</title>
   <script>
     (function() {
       var stored = localStorage.getItem('dashboard-theme');
