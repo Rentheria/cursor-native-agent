@@ -105,6 +105,11 @@ No hace falta tocar TypeScript para cambiar el comportamiento del agente.
    - Windows PowerShell: `irm 'https://cursor.com/install?win32=true' | iex`
    - Docs: [cursor.com/docs/cli/installation](https://cursor.com/docs/cli/installation)
 3. **Login:** `cursor-agent login` (abre navegador)
+4. **(Opcional) MarkItDown para PDFs:** Para adjuntar archivos PDF, instala:
+   ```bash
+   pip install markitdown[pdf]
+   ```
+   MarkItDown convierte PDFs a markdown, ahorrando tokens vs texto plano o imágenes OCR.
 
 ### Setup en un comando
 
@@ -172,6 +177,32 @@ Un prompt, un armado de contexto, una llamada a `cursor-agent -p`, y listo.
 ```bash
 npm run agent -- "resume en 3 bullets el archivo MEMORY.md"
 ```
+
+#### Adjuntar archivos (nuevo)
+
+Podés adjuntar archivos locales al prompt con `--attach`:
+
+```bash
+# Un PDF (se convierte a markdown con MarkItDown)
+npm run agent -- --attach document.pdf "resume este PDF"
+
+# Múltiples archivos
+npm run agent -- --attach report.pdf --attach data.csv "compara estos archivos"
+
+# Imagen (se pasa tal cual a cursor-agent)
+npm run agent -- --attach screenshot.png "describe esta imagen"
+```
+
+**Tipos de archivos soportados:**
+
+| Tipo | Manejo | Requisitos |
+|---|---|---|
+| **PDF** (`.pdf`) | Convertido a markdown con MarkItDown (ahorra tokens vs OCR/raw) | `pip install markitdown[pdf]` |
+| **Imágenes** (`.jpg`, `.png`, `.gif`, `.webp`) | Pasados a cursor-agent (mejor esfuerzo, depende del modelo) | — |
+| **Texto** (`.txt`, `.md`, `.json`, `.csv`, etc.) | Contenido incluido con límite de 50KB | — |
+| **Binarios** (otros) | Omitidos con nota | — |
+
+**Por qué MarkItDown para PDFs:** Los PDFs pueden ser enormes (cientos de miles de tokens si se extraen como texto plano o con OCR). MarkItDown genera markdown limpio y estructurado que es más compacto y fácil de procesar para el modelo. El límite por defecto es 100KB de markdown; si se excede, se trunca con nota.
 
 Qué esperar:
 
@@ -593,6 +624,10 @@ en `127.0.0.1`.
 El dashboard registra `POST /api/chat` (SSE) y muestra una caja de chat. Usa el
 mismo `runAgentTurn` que `npm run agent` / Telegram, con streaming
 (`--output-format stream-json --stream-partial-output`).
+
+**Adjuntar archivos:** Por ahora, el dashboard acepta paths de archivos en el
+JSON body (`{ "prompt": "...", "attachments": ["/path/to/file.pdf"] }`). Upload
+desde el navegador (multipart/form-data) es un TODO para versiones futuras.
 
 **Autenticación:** El dashboard usa cookies de sesión HttpOnly para localhost (happy path: abrís el dashboard y funciona). El token `DASHBOARD_TOKEN` (`.env`) se usa solo para APIs fuera del navegador o si borraste cookies. Modal "Desbloquear" como fallback.
 

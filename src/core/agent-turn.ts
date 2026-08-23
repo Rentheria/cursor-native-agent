@@ -35,6 +35,10 @@ import {
   appendToThread,
   buildThreadContext,
 } from '../lib/threads-store.js';
+import {
+  prepareAttachment,
+  type PreparedAttachment,
+} from '../lib/attachments/index.js';
 
 export type AgentRunner = (options: {
   readonly prompt: string;
@@ -106,6 +110,11 @@ export interface AgentTurnOptions {
    * Prepended to the prompt sent to cursor-agent AFTER build-intent checks.
    */
   readonly context?: { userPrompt: string; assistantReply: string };
+  /**
+   * Optional file attachments (local file paths). Processed before sending to cursor-agent:
+   * PDFs → MarkItDown markdown, images → pass-through, text → included with size caps.
+   */
+  readonly attachments?: readonly string[];
 }
 
 /**
@@ -267,6 +276,28 @@ export async function runAgentTurn(
       }`,
     );
 
+    let preparedAttachments: PreparedAttachment[] = [];
+    if (options.attachments !== undefined && options.attachments.length > 0) {
+      console.error(`[agent] Processing ${String(options.attachments.length)} attachment(s)…`);
+      preparedAttachments = await Promise.all(
+        options.attachments.map(async (filePath) => {
+          try {
+            const prepared = await prepareAttachment(filePath);
+            console.error(`[agent] Attached: ${filePath} (${prepared.kind})`);
+            return prepared;
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[agent] Failed to prepare attachment ${filePath}: ${message}`);
+            return {
+              kind: 'binary-skipped' as const,
+              originalPath: filePath,
+              text: `[Attachment failed: ${filePath}]`,
+            };
+          }
+        }),
+      );
+    }
+
     report = buildTurnDebugReport({
       prompt: userPrompt,
       allSkills: skills,
@@ -360,6 +391,7 @@ La confirmación expira en 10 minutos.`;
       memory,
       workspacePath,
       repoRoot,
+      attachments: preparedAttachments,
     });
     
     // Build requests get workspace cwd and --force (either CLI or confirmed safeMode).
