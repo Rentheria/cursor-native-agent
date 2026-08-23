@@ -22,6 +22,7 @@ import {
   loadThread,
   listThreads,
   deleteThread,
+  renameThread,
 } from '../lib/threads-store.js';
 import { renderDashboardHtml, type DashboardSnapshot } from './html.js';
 import { renderMarkdown } from './markdown.js';
@@ -365,9 +366,51 @@ export async function handleRequest(
       sendJson(res, 200, { success: true }, false, chatEnabled);
       return;
     }
+    if (method === 'PATCH') {
+      const address = server.address();
+      const port = typeof address === 'object' && address !== null
+        ? address.port
+        : (options.listenPort ?? resolveDashboardPort());
+      if (!isOriginAllowed(req, port)) {
+        sendJson(res, 403, {
+          error: 'forbidden',
+          message: 'Cross-origin requests are not allowed.',
+        }, false, chatEnabled);
+        return;
+      }
+
+      let body: unknown;
+      try {
+        body = await readJsonBody(req);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, { error: 'invalid_json', message }, false, chatEnabled);
+        return;
+      }
+
+      const title = extractThreadTitle(body);
+      if (title === undefined) {
+        sendJson(res, 400, {
+          error: 'invalid_title',
+          message: 'Expected JSON body { "title": "<non-empty string>" }.',
+        }, false, chatEnabled);
+        return;
+      }
+
+      const updated = await renameThread(options.repoRoot, threadId, title);
+      if (updated === undefined) {
+        sendJson(res, 404, {
+          error: 'not_found',
+          message: `Thread ${threadId} not found or title is invalid.`,
+        }, false, chatEnabled);
+        return;
+      }
+      sendJson(res, 200, { thread: updated }, false, chatEnabled);
+      return;
+    }
     sendJson(res, 405, {
       error: 'method_not_allowed',
-      message: `Use GET /api/threads/${threadId} to load a thread or DELETE to remove it.`,
+      message: `Use GET /api/threads/${threadId} to load a thread, PATCH to rename it, or DELETE to remove it.`,
     }, false, chatEnabled);
     return;
   }
@@ -923,6 +966,18 @@ function extractMarkdownText(body: unknown): string | undefined {
   }
   const text = (body as Record<string, unknown>)['text'];
   return typeof text === 'string' ? text : undefined;
+}
+
+function extractThreadTitle(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const title = (body as Record<string, unknown>)['title'];
+  if (typeof title !== 'string') {
+    return undefined;
+  }
+  const trimmed = title.trim();
+  return trimmed === '' ? undefined : trimmed;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {

@@ -12,6 +12,7 @@ import {
   buildThreadContext,
   generateThreadId,
   getThreadsDir,
+  renameThread,
   MAX_MESSAGES_PER_THREAD,
   MAX_THREAD_CONTEXT_CHARS,
   type Thread,
@@ -437,6 +438,118 @@ describe('buildThreadContext con límite de caracteres', () => {
   });
 });
 
+describe('renameThread', () => {
+  it('renombra un thread existente', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Mensaje inicial');
+      
+      const renamed = await renameThread(repoRoot, thread.id, 'Nuevo título');
+      assert.ok(renamed);
+      assert.equal(renamed.title, 'Nuevo título');
+      assert.equal(renamed.id, thread.id);
+      
+      const loaded = await loadThread(repoRoot, thread.id);
+      assert.ok(loaded);
+      assert.equal(loaded.title, 'Nuevo título');
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('devuelve undefined si el thread no existe', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const renamed = await renameThread(repoRoot, 'thread-no-existe', 'Título');
+      assert.equal(renamed, undefined);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rechaza threadId con path traversal', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const malicious1 = await renameThread(repoRoot, '../../../etc/passwd', 'Título');
+      assert.equal(malicious1, undefined);
+      
+      const malicious2 = await renameThread(repoRoot, 'thread-../other', 'Título');
+      assert.equal(malicious2, undefined);
+      
+      const malicious3 = await renameThread(repoRoot, 'thread\\windows', 'Título');
+      assert.equal(malicious3, undefined);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rechaza títulos vacíos', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Mensaje inicial');
+      
+      const empty1 = await renameThread(repoRoot, thread.id, '');
+      assert.equal(empty1, undefined);
+      
+      const empty2 = await renameThread(repoRoot, thread.id, '   ');
+      assert.equal(empty2, undefined);
+      
+      const loaded = await loadThread(repoRoot, thread.id);
+      assert.ok(loaded);
+      assert.equal(loaded.title, undefined);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('trunca títulos largos a 80 caracteres', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Mensaje inicial');
+      const longTitle = 'a'.repeat(100);
+      
+      const renamed = await renameThread(repoRoot, thread.id, longTitle);
+      assert.ok(renamed);
+      assert.equal(renamed.title?.length, 80);
+      assert.equal(renamed.title, 'a'.repeat(80));
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('recorta espacios en blanco del título', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Mensaje inicial');
+      
+      const renamed = await renameThread(repoRoot, thread.id, '  Título con espacios  ');
+      assert.ok(renamed);
+      assert.equal(renamed.title, 'Título con espacios');
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('actualiza updatedAt al renombrar', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Mensaje inicial');
+      const originalUpdatedAt = thread.updatedAt;
+      
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      
+      const renamed = await renameThread(repoRoot, thread.id, 'Nuevo título');
+      assert.ok(renamed);
+      assert.ok(
+        new Date(renamed.updatedAt).getTime() > new Date(originalUpdatedAt).getTime(),
+        'updatedAt should be updated after rename',
+      );
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('deleteThread', () => {
   it('elimina un thread existente', async () => {
     const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
@@ -478,6 +591,33 @@ describe('deleteThread', () => {
       
       const malicious3 = await deleteThread(repoRoot, 'thread\\windows');
       assert.equal(malicious3, false);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('listThreads usa título almacenado si existe', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      const thread = await createThread(repoRoot, 'Mensaje inicial que es largo y debería truncarse');
+      await renameThread(repoRoot, thread.id, 'Título personalizado');
+      
+      const summaries = await listThreads(repoRoot);
+      assert.equal(summaries.length, 1);
+      assert.equal(summaries[0]?.title, 'Título personalizado');
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('listThreads usa extractTitle si no hay título almacenado', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'threads-test-'));
+    try {
+      await createThread(repoRoot, 'Mensaje sin título personalizado');
+      
+      const summaries = await listThreads(repoRoot);
+      assert.equal(summaries.length, 1);
+      assert.equal(summaries[0]?.title, 'Mensaje sin título personalizado');
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }
