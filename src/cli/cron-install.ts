@@ -18,6 +18,34 @@ export interface CronInstallResult {
   readonly success: boolean;
   readonly message: string;
   readonly cronLine?: string;
+  readonly taskName?: string;
+}
+
+export function getPlatform(): NodeJS.Platform {
+  return process.platform;
+}
+
+function parseScheduleForWindows(cronSchedule: string): { time: string; days: string } | null {
+  const parts = cronSchedule.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return null;
+  }
+  const [minute, hour, , , dayOfWeek] = parts;
+  
+  if (minute === undefined || hour === undefined || dayOfWeek === undefined) {
+    return null;
+  }
+  
+  const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+  
+  const daysMap: Record<string, string> = {
+    '1-5': 'MON,TUE,WED,THU,FRI',
+    '*': 'MON,TUE,WED,THU,FRI,SAT,SUN',
+  };
+  
+  const days = daysMap[dayOfWeek] ?? 'MON,TUE,WED,THU,FRI';
+  
+  return { time, days };
 }
 
 export function buildCronLine(options: CronInstallOptions): string {
@@ -199,6 +227,159 @@ export async function uninstallCrontab(repoRoot: string): Promise<CronInstallRes
   };
 }
 
+function buildTaskName(repoRoot: string): string {
+  const safeName = path.basename(repoRoot).replace(/[^a-zA-Z0-9-]/g, '-');
+  return `CursorNativeAgent-${safeName}`;
+}
+
+export async function installTaskScheduler(options: CronInstallOptions): Promise<CronInstallResult> {
+  try {
+    await execAsync('where schtasks');
+  } catch {
+    return {
+      success: false,
+      message: [
+        'schtasks command not found.',
+        '',
+        'Task Scheduler is not available. This should be pre-installed on Windows.',
+        '',
+        'Alternative: Use WSL (Windows Subsystem for Linux) and install cron there:',
+        '  wsl --install',
+        '  Then inside WSL: sudo apt install cron',
+        '',
+        'Then retry: npm run cron:install',
+      ].join('\n'),
+    };
+  }
+
+  const taskName = buildTaskName(options.repoRoot);
+  const schedule = options.schedule ?? DEFAULT_CRON_SCHEDULE;
+  const parsed = parseScheduleForWindows(schedule);
+
+  if (parsed === null) {
+    return {
+      success: false,
+      message: [
+        `Invalid schedule format: ${schedule}`,
+        '',
+        'Expected cron format (e.g., "0 9 * * 1-5" for weekdays at 9:00 AM).',
+        'Currently only supports basic schedules with hour, minute, and day-of-week.',
+      ].join('\n'),
+    };
+  }
+
+  try {
+    const result = await execAsync(`schtasks /Query /TN "${taskName}"`, { encoding: 'utf8' });
+    if (result.stdout.includes(taskName)) {
+      return {
+        success: false,
+        message: `Task "${taskName}" already exists. Run 'npm run cron:uninstall' first if you want to reinstall.`,
+        taskName,
+      };
+    }
+  } catch {
+    // Task doesn't exist, continue with creation
+  }
+
+  const npmPath = process.execPath.replace(/node(\.exe)?$/i, 'npm');
+  const checkOnlyFlag = options.checkOnly !== false ? ' --check-only' : '';
+  const command = `"${npmPath}" run cron --prefix "${options.repoRoot}" --${checkOnlyFlag}`;
+
+  const schtasksArgs = [
+    '/Create',
+    '/TN', taskName,
+    '/TR', command,
+    '/SC', 'WEEKLY',
+    '/D', parsed.days,
+    '/ST', parsed.time,
+    '/F',
+  ];
+
+  try {
+    await execAsync(`schtasks ${schtasksArgs.map(arg => arg.includes(' ') ? `"${arg}"` : arg).join(' ')}`, { encoding: 'utf8' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      message: [
+        'Failed to create scheduled task.',
+        '',
+        `Error: ${message}`,
+        '',
+        'Make sure you have permission to create scheduled tasks.',
+        'You may need to run the command prompt as Administrator.',
+      ].join('\n'),
+    };
+  }
+
+  return {
+    success: true,
+    message: [
+      `Task "${taskName}" created successfully.`,
+      '',
+      `Schedule: ${parsed.days} at ${parsed.time}`,
+      `Command: npm run cron${checkOnlyFlag}`,
+      '',
+      `To verify: schtasks /Query /TN "${taskName}"`,
+    ].join('\n'),
+    taskName,
+  };
+}
+
+export async function uninstallTaskScheduler(repoRoot: string): Promise<CronInstallResult> {
+  try {
+    await execAsync('where schtasks');
+  } catch {
+    return {
+      success: false,
+      message: 'schtasks command not found. Nothing to uninstall.',
+    };
+  }
+
+  const taskName = buildTaskName(repoRoot);
+
+  try {
+    const result = await execAsync(`schtasks /Query /TN "${taskName}"`, { encoding: 'utf8' });
+    if (!result.stdout.includes(taskName)) {
+      return {
+        success: false,
+        message: `Task "${taskName}" not found. Nothing to uninstall.`,
+        taskName,
+      };
+    }
+  } catch {
+    return {
+      success: false,
+      message: `Task "${taskName}" not found. Nothing to uninstall.`,
+      taskName,
+    };
+  }
+
+  try {
+    await execAsync(`schtasks /Delete /TN "${taskName}" /F`, { encoding: 'utf8' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      message: [
+        `Failed to delete task "${taskName}".`,
+        '',
+        `Error: ${message}`,
+        '',
+        'Make sure you have permission to delete scheduled tasks.',
+        'You may need to run the command prompt as Administrator.',
+      ].join('\n'),
+      taskName,
+    };
+  }
+
+  return {
+    success: true,
+    message: `Task "${taskName}" deleted successfully.`,
+    taskName,
+  };
+}
+
 async function main(): Promise<void> {
   const repoRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -213,18 +394,29 @@ async function main(): Promise<void> {
     : undefined;
   const checkOnly = !args.includes('--no-check-only');
 
+  const platform = getPlatform();
+  const isWindows = platform === 'win32';
+
   if (isUninstall) {
-    const result = await uninstallCrontab(repoRoot);
+    const result = isWindows
+      ? await uninstallTaskScheduler(repoRoot)
+      : await uninstallCrontab(repoRoot);
     console.log(result.message);
     process.exitCode = result.success ? 0 : 1;
     return;
   }
 
-  const result = await installCrontab({
-    repoRoot,
-    schedule,
-    checkOnly,
-  });
+  const result = isWindows
+    ? await installTaskScheduler({
+        repoRoot,
+        schedule,
+        checkOnly,
+      })
+    : await installCrontab({
+        repoRoot,
+        schedule,
+        checkOnly,
+      });
   console.log(result.message);
   process.exitCode = result.success ? 0 : 1;
 }

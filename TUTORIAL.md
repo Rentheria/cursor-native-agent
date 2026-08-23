@@ -189,8 +189,9 @@ del repo cada día de semana (lunes a viernes, 9:00 AM local):
 npm run cron:install
 ```
 
-**Windows:** `cron:install` requiere `crontab` (Unix). En Windows, usá WSL para
-instalar el cron job, o considerá Task Scheduler (no implementado en este demo).
+**Windows:** `cron:install` uses Task Scheduler automatically on Windows. On
+Unix systems (macOS, Linux), it uses `crontab`. If you prefer WSL on Windows,
+run the command inside your WSL environment.
 
 El tick desatendido corre con `--check-only` (solo chequeo de git + memoria +
 skills, sin gastar llamadas al modelo). Si configuraste Telegram en `.env`,

@@ -7,6 +7,9 @@ import {
   buildCronLine,
   uninstallCrontab,
   DEFAULT_CRON_SCHEDULE,
+  getPlatform,
+  installTaskScheduler,
+  uninstallTaskScheduler,
 } from './cron-install.js';
 
 describe('cron-install', () => {
@@ -57,6 +60,38 @@ describe('cron-install', () => {
         result.message.includes('No crontab found') ||
         result.message.includes('crontab command not found') ||
         result.message.includes('No cron job found'),
+      );
+    });
+  });
+
+  describe('plataforma', () => {
+    it('detecta plataforma actual', () => {
+      const platform = getPlatform();
+      assert.ok(['win32', 'darwin', 'linux'].includes(platform));
+    });
+  });
+
+  describe('Task Scheduler de Windows (mock)', () => {
+    it('installTaskScheduler requiere schedule válido o schtasks disponible', async () => {
+      const result = await installTaskScheduler({
+        repoRoot: 'C:\\test\\repo',
+        schedule: 'invalid',
+        checkOnly: true,
+      });
+      assert.strictEqual(result.success, false);
+      assert.ok(
+        result.message.includes('Invalid schedule format') ||
+        result.message.includes('schtasks command not found'),
+        'El mensaje debe indicar error de schedule o schtasks no disponible',
+      );
+    });
+
+    it('uninstallTaskScheduler reporta cuando schtasks no está disponible', async () => {
+      const result = await uninstallTaskScheduler('C:\\test\\repo');
+      assert.strictEqual(result.success, false);
+      assert.ok(
+        result.message.includes('schtasks command not found') ||
+        result.message.includes('not found'),
       );
     });
   });
