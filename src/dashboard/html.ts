@@ -244,6 +244,17 @@ ${memoryItems}
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>cursor-native-agent — ${chatEnabled ? 'chat' : 'observe'}</title>
+  <script>
+    (function() {
+      var stored = localStorage.getItem('dashboard-theme');
+      var theme = stored || 'system';
+      if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -264,9 +275,17 @@ function renderObserveShell(options: {
 }): string {
   return `<body class="mode-observe">
   <header class="top">
-    <h1>cursor-native-agent · observe</h1>
-    <p>Read-only local dashboard. Shows recent agent turns, cron findings, and the MEMORY.md index. Does not run the agent or write files.</p>
-    <div class="meta">generated ${escapeHtml(options.generatedAt)} · refresh the page to reload</div>
+    <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+      <div style="flex: 1;">
+        <h1>cursor-native-agent · observe</h1>
+        <p>Read-only local dashboard. Shows recent agent turns, cron findings, and the MEMORY.md index. Does not run the agent or write files.</p>
+        <div class="meta">generated ${escapeHtml(options.generatedAt)} · refresh the page to reload</div>
+      </div>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">
+        <span class="theme-toggle-icon">◐</span>
+        <span class="theme-toggle-label">Tema</span>
+      </button>
+    </div>
   </header>
   <main class="observe-main">
 ${options.agentSection}
@@ -322,10 +341,14 @@ function renderChatShell(options: {
     <div class="chat-column">
       <header class="chat-top">
         <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true">Paneles</button>
-        <div>
+        <div style="flex: 1;">
           <h1>Chat</h1>
           <p class="chat-sub">POST /api/chat · SSE · mismo pipeline que <span class="mono">npm run agent</span></p>
         </div>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">
+          <span class="theme-toggle-icon">◐</span>
+          <span class="theme-toggle-label">Tema</span>
+        </button>
       </header>
       <div class="info-banner" role="status">
         Confirmar antes de escribir en el workspace · --trust · sesión local en <span class="mono">127.0.0.1</span> (cookie; Desbloquear solo si borraste cookies)
@@ -354,6 +377,7 @@ ${chatClientScript()}
 function sharedStyles(): string {
   return `
     :root {
+      color-scheme: light;
       --ink: #15201c;
       --muted: #5a6b64;
       --line: #c9d2cb;
@@ -367,11 +391,62 @@ function sharedStyles(): string {
       --assistant-bubble: #ffffff;
       --warn: #8a4b12;
       --warn-soft: #f5e6d2;
+      --danger: #6b2a22;
       --danger-soft: #f3d9d4;
+      --modal-overlay: rgba(21, 32, 28, 0.65);
+      --modal-shadow: rgba(21, 32, 28, 0.3);
+      --error-text: #c53030;
+      --button-text: #ffffff;
       --mono: "IBM Plex Mono", "ui-monospace", "Cascadia Code", monospace;
       --sans: "IBM Plex Sans", "Segoe UI", sans-serif;
       --sidebar-w: 22rem;
       --radius: 1.1rem;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --ink: #e8f0ec;
+      --muted: #8ea099;
+      --line: #364842;
+      --panel: #1a2420;
+      --paper: #0f1612;
+      --surface: #1f2b26;
+      --accent: #1eb39f;
+      --accent-soft: #0d3d35;
+      --user-bubble: #1eb39f;
+      --user-ink: #0a1b17;
+      --assistant-bubble: #1f2b26;
+      --warn: #d18c3e;
+      --warn-soft: #3d2f1a;
+      --danger: #e07369;
+      --danger-soft: #3d1f1c;
+      --modal-overlay: rgba(0, 0, 0, 0.75);
+      --modal-shadow: rgba(0, 0, 0, 0.6);
+      --error-text: #f38b82;
+      --button-text: #0a1b17;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --ink: #e8f0ec;
+        --muted: #8ea099;
+        --line: #364842;
+        --panel: #1a2420;
+        --paper: #0f1612;
+        --surface: #1f2b26;
+        --accent: #1eb39f;
+        --accent-soft: #0d3d35;
+        --user-bubble: #1eb39f;
+        --user-ink: #0a1b17;
+        --assistant-bubble: #1f2b26;
+        --warn: #d18c3e;
+        --warn-soft: #3d2f1a;
+        --danger: #e07369;
+        --danger-soft: #3d1f1c;
+        --modal-overlay: rgba(0, 0, 0, 0.75);
+        --modal-shadow: rgba(0, 0, 0, 0.6);
+        --error-text: #f38b82;
+        --button-text: #0a1b17;
+      }
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -583,6 +658,30 @@ function sharedStyles(): string {
     }
     .memory-list .path { color: var(--muted); font-size: 0.74rem; }
     .memory-list .keywords { font-size: 0.82rem; }
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.35rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .theme-toggle:hover {
+      background: var(--panel);
+      color: var(--ink);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    }
+    .theme-toggle-icon {
+      font-size: 0.95em;
+      opacity: 0.8;
+    }
   `;
 }
 
@@ -701,7 +800,7 @@ function chatStyles(): string {
       border: none;
       border-radius: 999px;
       background: var(--accent);
-      color: #fff;
+      color: var(--button-text);
       cursor: pointer;
     }
     .unlock-hint {
@@ -725,7 +824,7 @@ function chatStyles(): string {
     }
     .confirm-btn.ok {
       background: var(--accent);
-      color: #fff;
+      color: var(--button-text);
     }
     .confirm-btn.no {
       background: var(--line);
@@ -982,8 +1081,8 @@ function chatStyles(): string {
     }
     .chat-bubble.error {
       background: var(--danger-soft);
-      color: #6b2a22;
-      border: 1px solid color-mix(in srgb, #6b2a22 25%, var(--line));
+      color: var(--danger);
+      border: 1px solid color-mix(in srgb, var(--danger) 25%, var(--line));
       border-bottom-left-radius: 0.35rem;
       white-space: normal;
     }
@@ -1023,7 +1122,7 @@ function chatStyles(): string {
       border: none;
       border-radius: 999px;
       background: var(--accent);
-      color: #fff;
+      color: var(--button-text);
       cursor: pointer;
     }
     .composer button:disabled {
@@ -1155,7 +1254,7 @@ function chatClientScript(): string {
   var log = document.getElementById('chat-log');
   var empty = document.getElementById('chat-empty');
   var sendBtn = document.getElementById('chat-send');
-  var toggle = document.getElementById('sidebar-toggle');
+  var sidebarToggle = document.getElementById('sidebar-toggle');
   if (!form || !input || !log || !sendBtn) return;
 
   var currentContext = null;
@@ -1179,10 +1278,10 @@ function chatClientScript(): string {
     
     var overlay = document.createElement('div');
     overlay.id = 'unlock-modal';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999;animation:fadeIn 200ms ease;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:var(--modal-overlay);display:flex;align-items:center;justify-content:center;z-index:999;animation:fadeIn 200ms ease;';
     
     var modal = document.createElement('div');
-    modal.style.cssText = 'background:var(--surface);padding:1.5rem;border-radius:1rem;max-width:24rem;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:slideUp 250ms ease;';
+    modal.style.cssText = 'background:var(--surface);padding:1.5rem;border-radius:1rem;max-width:24rem;width:90%;box-shadow:0 20px 60px var(--modal-shadow);animation:slideUp 250ms ease;';
     
     var title = document.createElement('h2');
     title.textContent = isRetry ? 'Token incorrecto' : 'Dashboard protegido';
@@ -1202,7 +1301,7 @@ function chatClientScript(): string {
     btn.style.cssText = 'width:100%;padding:0.65rem;font:inherit;font-weight:600;border:none;border-radius:0.6rem;background:var(--accent);color:#fff;cursor:pointer;';
     
     var error = document.createElement('p');
-    error.style.cssText = 'margin:0.75rem 0 0;color:#c53030;font-size:0.85rem;display:none;';
+    error.style.cssText = 'margin:0.75rem 0 0;color:var(--error-text);font-size:0.85rem;display:none;';
     
     btn.addEventListener('click', function () {
       var token = inputField.value.trim();
@@ -1312,11 +1411,52 @@ function chatClientScript(): string {
     });
   });
 
-  if (toggle) {
-    toggle.addEventListener('click', function () {
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', function () {
       var open = document.body.classList.toggle('sidebar-open');
-      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
+  }
+  
+  function initThemeToggle() {
+    var toggle = document.getElementById('theme-toggle');
+    var label = toggle ? toggle.querySelector('.theme-toggle-label') : null;
+    if (!toggle) return;
+    
+    function getTheme() {
+      return localStorage.getItem('dashboard-theme') || 'system';
+    }
+    
+    function setTheme(theme) {
+      localStorage.setItem('dashboard-theme', theme);
+      applyTheme(theme);
+    }
+    
+    function applyTheme(theme) {
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      updateLabel(theme);
+    }
+    
+    function updateLabel(theme) {
+      if (!label) return;
+      var labels = { light: 'Claro', dark: 'Oscuro', system: 'Sistema' };
+      label.textContent = labels[theme] || 'Tema';
+    }
+    
+    function cycleTheme() {
+      var current = getTheme();
+      var next = current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system';
+      setTheme(next);
+    }
+    
+    toggle.addEventListener('click', cycleTheme);
+    updateLabel(getTheme());
   }
 
   function hideEmpty() {
@@ -1660,12 +1800,54 @@ function chatClientScript(): string {
     });
   }
 
+  initThemeToggle();
   loadThreads();
 })();`;
 }
 
 function observeClientScript(): string {
   return `(function () {
+  function initThemeToggle() {
+    var toggle = document.getElementById('theme-toggle');
+    var label = toggle ? toggle.querySelector('.theme-toggle-label') : null;
+    if (!toggle) return;
+    
+    function getTheme() {
+      return localStorage.getItem('dashboard-theme') || 'system';
+    }
+    
+    function setTheme(theme) {
+      localStorage.setItem('dashboard-theme', theme);
+      applyTheme(theme);
+    }
+    
+    function applyTheme(theme) {
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      updateLabel(theme);
+    }
+    
+    function updateLabel(theme) {
+      if (!label) return;
+      var labels = { light: 'Claro', dark: 'Oscuro', system: 'Sistema' };
+      label.textContent = labels[theme] || 'Tema';
+    }
+    
+    function cycleTheme() {
+      var current = getTheme();
+      var next = current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system';
+      setTheme(next);
+    }
+    
+    toggle.addEventListener('click', cycleTheme);
+    updateLabel(getTheme());
+  }
+  
   document.querySelectorAll('.turn-header').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var turnId = btn.getAttribute('data-turn-id');
@@ -1677,6 +1859,8 @@ function observeClientScript(): string {
       }
     });
   });
+  
+  initThemeToggle();
 })();`;
 }
 
