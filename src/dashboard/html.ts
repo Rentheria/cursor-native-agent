@@ -1037,6 +1037,83 @@ function chatStyles(): string {
       color: var(--muted);
       font-family: var(--mono);
     }
+    .button {
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 0.65rem;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 0.75rem;
+    }
+    .button:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .thread-list {
+      display: grid;
+      gap: 0.35rem;
+    }
+    .thread-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: 0.55rem;
+      background: var(--surface);
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      transition: background 120ms ease;
+    }
+    .thread-item:hover {
+      background: var(--accent-soft);
+    }
+    .thread-item.is-active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+    .thread-content {
+      min-width: 0;
+    }
+    .thread-title {
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--ink);
+      margin: 0 0 0.15rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .thread-meta {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .thread-delete-btn {
+      padding: 0.25rem 0.4rem;
+      border: 1px solid var(--line);
+      border-radius: 0.45rem;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      transition: all 120ms ease;
+      flex-shrink: 0;
+    }
+    .thread-delete-btn:hover {
+      background: var(--danger-soft);
+      border-color: #c53030;
+      color: #c53030;
+    }
     @keyframes blink {
       50% { opacity: 0; }
     }
@@ -1471,23 +1548,64 @@ function chatClientScript(): string {
           var active = currentThreadId === t.id ? ' is-active' : '';
           var title = t.title || 'Sin título';
           if (title.length > 50) title = title.slice(0, 47) + '...';
-          html += '<button class="thread-item' + active + '" data-thread-id="' + t.id + '">' +
+          html += '<div class="thread-item' + active + '" data-thread-id="' + t.id + '">' +
+                  '<div class="thread-content">' +
                   '<div class="thread-title">' + title + '</div>' +
                   '<div class="thread-meta">' + new Date(t.updatedAt).toLocaleString() + '</div>' +
-                  '</button>';
+                  '</div>' +
+                  '<button class="thread-delete-btn" data-thread-id="' + t.id + '" title="Borrar hilo">✕</button>' +
+                  '</div>';
         });
         html += '</div>';
         panel.innerHTML = html;
         
-        panel.querySelectorAll('.thread-item').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var threadId = btn.getAttribute('data-thread-id');
+        panel.querySelectorAll('.thread-item').forEach(function (item) {
+          var threadId = item.getAttribute('data-thread-id');
+          var deleteBtn = item.querySelector('.thread-delete-btn');
+          
+          item.addEventListener('click', function (e) {
+            if (e.target === deleteBtn || deleteBtn.contains(e.target)) {
+              return;
+            }
             loadThread(threadId);
           });
+          
+          if (deleteBtn) {
+            deleteBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              if (confirm('¿Borrar este hilo?')) {
+                deleteThread(threadId);
+              }
+            });
+          }
         });
       })
       .catch(function (err) {
         console.error('Failed to load threads:', err);
+      });
+  }
+
+  function deleteThread(threadId) {
+    fetchWithToken('/api/threads/' + threadId, { method: 'DELETE' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function () {
+        if (currentThreadId === threadId) {
+          currentThreadId = null;
+          currentContext = null;
+          localStorage.removeItem('currentThreadId');
+          log.innerHTML = '';
+          if (empty && !empty.parentNode) {
+            log.appendChild(empty);
+          }
+        }
+        loadThreads();
+      })
+      .catch(function (err) {
+        alert('Error al borrar el hilo: ' + (err.message || String(err)));
+        console.error('Failed to delete thread:', err);
       });
   }
 

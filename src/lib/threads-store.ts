@@ -235,6 +235,33 @@ export async function listThreads(repoRoot: string): Promise<readonly ThreadSumm
 }
 
 /**
+ * Deletes a thread by ID. Returns true if the thread was deleted, false if it didn't exist.
+ * Validates threadId to prevent path traversal attacks.
+ */
+export async function deleteThread(
+  repoRoot: string,
+  threadId: string,
+): Promise<boolean> {
+  // Validate threadId to prevent path traversal
+  if (threadId.includes('..') || threadId.includes('/') || threadId.includes('\\')) {
+    return false;
+  }
+
+  const threadPath = getThreadPath(repoRoot, threadId);
+  if (!existsSync(threadPath)) {
+    return false;
+  }
+
+  try {
+    const { unlink } = await import('node:fs/promises');
+    await unlink(threadPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Builds context string from recent thread messages (last N exchanges).
  * Also caps total character length to MAX_THREAD_CONTEXT_CHARS.
  * Returns empty string if thread not found or has no messages.

@@ -890,6 +890,72 @@ describe('dashboard token authentication', () => {
       await closeServer(server);
     }
   });
+
+  it('DELETE_/api/threads/:id_debería_rechazar_sin_token_con_401', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/thread-123`, {
+        method: 'DELETE',
+      });
+      assert.equal(res.status, 401);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'unauthorized');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('DELETE_/api/threads/:id_debería_eliminar_thread_existente', async () => {
+    const { createThread } = await import('../lib/threads-store.js');
+    const thread = await createThread(tmpRoot, 'Thread a eliminar');
+
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/${thread.id}`, {
+        method: 'DELETE',
+        headers: { 'X-Dashboard-Token': 'test-token' },
+      });
+      assert.equal(res.status, 200);
+      const json = await res.json() as { success: boolean };
+      assert.equal(json.success, true);
+
+      const { loadThread } = await import('../lib/threads-store.js');
+      const loaded = await loadThread(tmpRoot, thread.id);
+      assert.equal(loaded, undefined);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('DELETE_/api/threads/:id_debería_devolver_404_si_no_existe', async () => {
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+    });
+    const baseUrl = await listen(server);
+    try {
+      const res = await fetch(`${baseUrl}/api/threads/thread-no-existe`, {
+        method: 'DELETE',
+        headers: { 'X-Dashboard-Token': 'test-token' },
+      });
+      assert.equal(res.status, 404);
+      const json = await res.json() as { error: string };
+      assert.equal(json.error, 'not_found');
+    } finally {
+      await closeServer(server);
+    }
+  });
 });
 
 /** Extrae el texto de los eventos SSE `delta`, en orden. */
