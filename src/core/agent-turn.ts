@@ -34,6 +34,7 @@ import {
   appendToThread,
   buildThreadContext,
   deleteThread,
+  listThreads,
 } from '../lib/threads-store.js';
 import {
   prepareAttachment,
@@ -212,6 +213,31 @@ export async function runAgentTurn(
           stderr: '',
           exitCode: 0,
           threadId: newThread.id,
+        };
+      }
+      
+      if (slashCommand.command === 'threads') {
+        const threads = await listThreads(repoRoot);
+        let threadsMessage = '# Threads\n\n';
+        
+        if (threads.length === 0) {
+          threadsMessage += 'No threads found.';
+        } else {
+          for (const thread of threads) {
+            const current = thread.id === effectiveThreadId ? ' (current)' : '';
+            threadsMessage += `- **${thread.id}**: "${thread.title}" (${String(thread.messageCount)} messages)${current}\n`;
+          }
+        }
+        
+        if (effectiveThreadId !== undefined) {
+          await appendToThread(repoRoot, effectiveThreadId, 'assistant', threadsMessage);
+        }
+        
+        return {
+          reply: threadsMessage,
+          stderr: '',
+          exitCode: 0,
+          ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
         };
       }
     }

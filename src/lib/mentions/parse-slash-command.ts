@@ -1,7 +1,7 @@
 import type { SlashCommand } from './types.js';
 import type { SkillDocument } from '../types.js';
 
-const BUILT_IN_COMMANDS = new Set(['help', 'clear']);
+const BUILT_IN_COMMANDS = new Set(['help', 'clear', 'threads']);
 
 export function parseSlashCommand(
   prompt: string,
@@ -54,7 +54,8 @@ export function buildHelpMessage(skills: readonly SkillDocument[]): string {
     '## Built-in Commands',
     '',
     '- `/help` — Show this help message',
-    '- `/clear` — Clear thread history (if threads are enabled)',
+    '- `/clear` — Clear thread history (starts fresh conversation)',
+    '- `/threads` — List all threads',
     '',
     '## Skills (via slash commands)',
     '',

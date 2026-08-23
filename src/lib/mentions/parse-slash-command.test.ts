@@ -46,6 +46,14 @@ describe('parseSlashCommand', () => {
     assert.equal(result.isBuiltIn, true);
   });
 
+  test('parses built-in threads command', () => {
+    const result = parseSlashCommand('/threads', mockSkills);
+    assert.ok(result !== undefined);
+    assert.equal(result.command, 'threads');
+    assert.equal(result.isBuiltIn, true);
+    assert.equal(result.args, '');
+  });
+
   test('parses skill command', () => {
     const result = parseSlashCommand('/git-commit fix bug', mockSkills);
     assert.ok(result !== undefined);
@@ -80,6 +88,7 @@ describe('buildHelpMessage', () => {
     const help = buildHelpMessage(mockSkills);
     assert.ok(help.includes('/help'));
     assert.ok(help.includes('/clear'));
+    assert.ok(help.includes('/threads'));
   });
 
   test('includes skills', () => {
