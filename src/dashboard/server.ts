@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHmac, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +39,8 @@ export const DASHBOARD_TOKEN_ENV = 'DASHBOARD_TOKEN';
 export const DASHBOARD_SESSION_SECRET_ENV = 'DASHBOARD_SESSION_SECRET';
 export const DASHBOARD_SESSION_COOKIE_NAME = 'cursor_agent_session';
 export const MAX_JSON_BODY_BYTES = 256 * 1024;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENTS_DIR = '.attachments';
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 export const RATE_LIMIT_MAX_REQUESTS = 10;
 
@@ -435,6 +437,45 @@ export async function handleRequest(
     return;
   }
 
+  if (pathname === '/api/attachments') {
+    if (!chatEnabled) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        message: 'Attachments are only available when chat is enabled.',
+      }, false, chatEnabled);
+      return;
+    }
+    if (!isTokenOrSessionValid(req, requiredToken, sessionSecret, chatEnabled)) {
+      sendJson(res, 401, {
+        error: 'unauthorized',
+        message: 'Token de autenticación requerido. Abrí el archivo .env en la raíz del proyecto y copiá el valor de DASHBOARD_TOKEN.' + (requiredToken === undefined ? ' Si no existe, ejecutá npm run setup para generar uno.' : ' Pegalo en el modal "Desbloquear" que aparece al cargar el dashboard.'),
+      }, false, chatEnabled);
+      return;
+    }
+    if (method !== 'POST') {
+      sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'Use POST /api/attachments with JSON body { "files": [{ "name": "...", "data": "..." }] }.',
+      }, false, chatEnabled);
+      return;
+    }
+    
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null
+      ? address.port
+      : (options.listenPort ?? resolveDashboardPort());
+    if (!isOriginAllowed(req, port)) {
+      sendJson(res, 403, {
+        error: 'forbidden',
+        message: 'Cross-origin requests are not allowed.',
+      }, false, chatEnabled);
+      return;
+    }
+    
+    await handleAttachmentsPost(req, res, options);
+    return;
+  }
+
   if (!READ_ONLY_METHODS.has(method)) {
     sendJson(res, 405, {
       error: 'method_not_allowed',
@@ -694,6 +735,71 @@ async function handleMarkdownPost(
 
   const markdown = renderMarkdown(text);
   sendJson(res, 200, { markdown });
+}
+
+async function handleAttachmentsPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: DashboardServerOptions,
+): Promise<void> {
+  let body: unknown;
+  try {
+    body = await readJsonBodyLarge(req);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('too large')) {
+      sendJson(res, 413, { error: 'payload_too_large', message });
+    } else {
+      sendJson(res, 400, { error: 'invalid_json', message });
+    }
+    return;
+  }
+
+  const files = extractAttachmentFiles(body);
+  if (files === undefined || files.length === 0) {
+    sendJson(res, 400, {
+      error: 'invalid_files',
+      message: 'Expected JSON body { "files": [{ "name": "...", "data": "base64..." }] }.',
+    });
+    return;
+  }
+
+  const attachmentsDir = path.join(options.repoRoot, ATTACHMENTS_DIR);
+  try {
+    await mkdir(attachmentsDir, { recursive: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, 500, { error: 'mkdir_failed', message });
+    return;
+  }
+
+  const savedPaths: string[] = [];
+  for (const file of files) {
+    try {
+      const safeName = sanitizeFilename(file.name);
+      const timestamp = Date.now();
+      const uniqueName = `${timestamp}-${safeName}`;
+      const filePath = path.join(attachmentsDir, uniqueName);
+      
+      const buffer = Buffer.from(file.data, 'base64');
+      if (buffer.length > MAX_ATTACHMENT_BYTES) {
+        sendJson(res, 413, {
+          error: 'file_too_large',
+          message: `File "${file.name}" exceeds ${MAX_ATTACHMENT_BYTES} bytes limit.`,
+        });
+        return;
+      }
+      
+      await writeFile(filePath, buffer);
+      savedPaths.push(filePath);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendJson(res, 500, { error: 'write_failed', message });
+      return;
+    }
+  }
+
+  sendJson(res, 200, { paths: savedPaths });
 }
 
 async function handleChatPost(
@@ -1017,6 +1123,53 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
     return {};
   }
   return JSON.parse(raw) as unknown;
+}
+
+async function readJsonBodyLarge(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let totalSize = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalSize += buffer.length;
+    if (totalSize > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`Body too large. Maximum allowed: ${MAX_ATTACHMENT_BYTES} bytes.`);
+    }
+    chunks.push(buffer);
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
+  if (raw === '') {
+    return {};
+  }
+  return JSON.parse(raw) as unknown;
+}
+
+function extractAttachmentFiles(body: unknown): Array<{ name: string; data: string }> | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const files = (body as Record<string, unknown>)['files'];
+  if (!Array.isArray(files)) {
+    return undefined;
+  }
+  const validFiles: Array<{ name: string; data: string }> = [];
+  for (const file of files) {
+    if (typeof file !== 'object' || file === null) {
+      continue;
+    }
+    const name = (file as Record<string, unknown>)['name'];
+    const data = (file as Record<string, unknown>)['data'];
+    if (typeof name === 'string' && typeof data === 'string') {
+      validFiles.push({ name, data });
+    }
+  }
+  return validFiles.length > 0 ? validFiles : undefined;
+}
+
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-z0-9_.-]/gi, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 255);
 }
 
 function isOriginAllowed(req: IncomingMessage, port: number): boolean {
