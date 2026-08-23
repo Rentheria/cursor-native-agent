@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "bin": {
-    "cursor-native-agent": "./dist/core/index.js"
+    "cursor-native-agent": "./bin/cursor-native-agent"
   },
   "scripts": {
     "setup": "tsx src/cli/setup.ts",
