@@ -458,6 +458,8 @@ export async function runTelegramBot(options: TelegramBotOptions): Promise<void>
         userPrompt: inbound.text,
         stream: true,
         safeMode: true,
+        channel: 'telegram',
+        clientId: String(inbound.chatId),
         ...(confirmedForce !== undefined ? { confirmedForce } : {}),
         ...(workspacePath !== undefined ? { workspacePath } : {}),
         ...(threadId !== undefined ? { threadId } : {}),
