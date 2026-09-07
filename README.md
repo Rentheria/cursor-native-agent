@@ -62,6 +62,19 @@ propia máquina (tu cuenta Cursor, tu billing). No es SaaS multi-tenant.
 - **Telegram** opcional; falla cerrado sin `TELEGRAM_ALLOWED_CHAT_IDS` (allowlist
   obligatoria).
 
+**Protecciones de seguridad implementadas (Portfolio Security):**
+
+1. **Server-side cost/usage limits** - Límites diarios, por hora y por sesión que no
+   pueden ser sobrepasados por clientes. Default: 1 hora/día, 10 min/hora.
+2. **Prompt injection defenses** - Detección y bloqueo de intentos de manipular
+   instrucciones del sistema o inyectar contenido malicioso.
+3. **AI usage/cost caps** - Enforcement automático de límites de uso con mensajes
+   claros cuando se alcanza el límite.
+4. **Rate limiting mejorado** - Protección contra burst (3 req/10s) y sustained
+   (10 req/min) en el dashboard HTTP.
+
+Ver detalles completos en [`SECURITY.md`](./SECURITY.md).
+
 No expongas el puerto del dashboard a internet sin autenticación adicional.
 Barra de seguridad: suficientemente seguro para que extraños dejen
 dashboard/Telegram/cron encendidos diariamente.

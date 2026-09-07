@@ -591,6 +591,10 @@ describe('dashboard POST /api/chat (opt-in)', () => {
     const baseUrl = await listen(server);
     try {
       for (let i = 0; i < 10; i++) {
+        if (i > 0 && i % 3 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 11000));
+        }
+        
         const res = await fetch(`${baseUrl}/api/chat`, {
           method: 'POST',
           headers: {
@@ -599,7 +603,7 @@ describe('dashboard POST /api/chat (opt-in)', () => {
           },
           body: JSON.stringify({ prompt: `test ${i}` }),
         });
-        assert.equal(res.status, 200);
+        assert.equal(res.status, 200, `Request ${i} should succeed`);
         await res.text();
       }
 
