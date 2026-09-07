@@ -2,6 +2,16 @@
 
 [Español](./README.md) | **English**
 
+[![CI](https://github.com/Rentheria/cursor-native-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Rentheria/cursor-native-agent/actions/workflows/ci.yml)
+
+---
+
+> **Note:** This English README provides installation and architecture overview. For complete usage documentation (one-shot mode, REPL, cron setup, Telegram bot, dashboard, watch mode, multi-agent orchestration), see the [Spanish README](./README.md).
+
+---
+
+> **TL;DR:** `npm run setup` → `npm run agent -- "your prompt"`. TypeScript wrapper that orchestrates markdown skills + lazy memory over cursor-agent (native Cursor CLI). Public repository; package marked `private: true` in package.json (not published to npm).
+
 ---
 
 Personal agent built **100% on top of `cursor-agent`** (Cursor CLI) — markdown skills + lazy-loaded index+detail memory + autonomous cron loop + multi-agent orchestration.
