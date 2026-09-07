@@ -2,6 +2,12 @@
 
 **Español** | [English](./README.en.md)
 
+[![CI](https://github.com/Rentheria/cursor-native-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Rentheria/cursor-native-agent/actions/workflows/ci.yml)
+
+---
+
+> **TL;DR:** `npm run setup` → `npm run agent -- "tu prompt"`. Wrapper TypeScript que orquesta skills markdown + memoria lazy sobre cursor-agent (CLI nativo de Cursor). Repositorio público; paquete marcado `private: true` en package.json (no se publica a npm).
+
 ---
 
 Agente personal construido **100% sobre `cursor-agent`** (Cursor CLI) — skills
@@ -902,11 +908,6 @@ forkear:
   exclusiones explícitas.
 
 Ver también “Fuera de alcance” en `ARCHITECTURE.md` y [`CONTRIBUTING.md`](./CONTRIBUTING.md).
-
-
-## Licencia
-
-Este proyecto está bajo licencia [MIT](./LICENSE). Copyright (c) 2026 Alejandro Rentheria.
 
 
 ## Licencia

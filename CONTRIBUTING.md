@@ -46,15 +46,8 @@ npm run agent -- "en una frase: qué hace este repo"
 - **Branch names:** `tipo/descripcion` only — e.g. `feat/skills-loader`,
   `docs/readme-arquitectura-contributing`. Never `TICKET-123-…`.
 - **Commits:** Conventional Commits in English, imperative mood, one topic per
-  commit.
-- **Co-author trailer (required in this repo):** every commit must include:
-
-  ```
-  Co-authored-by: Cursor <cursoragent@cursor.com>
-  ```
-
-  This project is a demo of building with Cursor CLI; the trailer keeps that
-  history verifiable. Most other repos do not need this — here it is expected.
+  commit. **Do not add Co-authored-by trailers** — commits in this repo must
+  have none.
 
 Example:
 
@@ -62,7 +55,6 @@ Example:
 git commit -m "$(cat <<'EOF'
 feat(skills): add example skill for PR review drafts
 
-Co-authored-by: Cursor <cursoragent@cursor.com>
 EOF
 )"
 ```
