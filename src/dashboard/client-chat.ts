@@ -501,6 +501,8 @@ export function chatClientScript(): string {
                 }
                 
                 if (payload.requiresForceConfirmation === true) {
+                  assistantEl.classList.add('confirm-prompt');
+                  
                   var actions = document.createElement('div');
                   actions.className = 'confirm-actions';
                   
@@ -582,7 +584,7 @@ export function chatClientScript(): string {
                   
                   actions.appendChild(okBtn);
                   actions.appendChild(noBtn);
-                  assistantEl.parentNode.appendChild(actions);
+                  assistantEl.appendChild(actions);
                 }
                 
                 if (payload.threadId) {

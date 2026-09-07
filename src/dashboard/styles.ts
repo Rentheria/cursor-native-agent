@@ -555,35 +555,48 @@ export function chatStyles(): string {
       font-size: 0.85rem !important;
       color: var(--muted) !important;
     }
+    .chat-bubble.confirm-prompt {
+      border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+      background: color-mix(in srgb, var(--warn-soft) 30%, var(--assistant-bubble));
+    }
     .confirm-actions {
       display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
       gap: 0.65rem;
-      margin-top: 0.75rem;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid color-mix(in srgb, var(--warn) 15%, var(--line));
+      width: 100%;
     }
     .confirm-btn {
       font: inherit;
       font-weight: 600;
       font-size: 0.92rem;
-      padding: 0.6rem 1.1rem;
+      padding: 0.6rem 1.25rem;
       border: none;
       border-radius: 999px;
       cursor: pointer;
       transition: all 150ms ease;
+      box-shadow: var(--shadow-sm);
+      flex-shrink: 0;
     }
     .confirm-btn.ok {
       background: var(--accent);
       color: var(--button-text);
     }
-    .confirm-btn.ok:hover {
+    .confirm-btn.ok:hover:not(:disabled) {
       background: var(--accent-hover);
       transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
     }
     .confirm-btn.no {
       background: var(--line);
       color: var(--ink);
     }
-    .confirm-btn.no:hover {
+    .confirm-btn.no:hover:not(:disabled) {
       background: var(--panel);
+      transform: translateY(-1px);
     }
     .confirm-btn:disabled {
       opacity: 0.5;
