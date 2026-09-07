@@ -72,8 +72,10 @@ describe('sanitizePrompt', () => {
   });
 
   test('normalizes excessive whitespace', () => {
-    const result = sanitizePrompt('hello     world\n\n\n\n\ngoodbye');
+    const result = sanitizePrompt('hello     world     \n\n\n\n\n     goodbye     ');
     assert.ok(result.warnings.some((w) => w.includes('whitespace')));
+    assert.equal(result.blocked, false);
+    assert.equal(result.sanitized.includes('     '), false);
     assert.equal(result.sanitized.includes('\n\n\n'), false);
   });
 });

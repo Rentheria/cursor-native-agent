@@ -10,12 +10,13 @@ export interface SanitizationResult {
 }
 
 const INJECTION_PATTERNS = [
-  /ignore\s+(previous|all|prior|above)\s+(instructions|directives|prompts|commands)/i,
-  /forget\s+(everything|all|previous|prior)\s+(instructions|context|prompts)/i,
-  /disregard\s+(previous|all|prior|above)\s+(instructions|directives|prompts)/i,
+  /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|directives?|prompts?|commands?)/i,
+  /ignore\s+all/i,
+  /forget\s+(everything|all|previous|prior)/i,
+  /disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|directives?|prompts?)/i,
   /you\s+are\s+now\s+(a|an|the)/i,
-  /new\s+(instructions|directive|prompt|system|role)/i,
-  /act\s+as\s+(if|though)\s+you/i,
+  /new\s+(instructions?|directive|prompt|system|role)/i,
+  /act\s+as(\s+(if|though|a|an))?/i,
   /pretend\s+(you|to\s+be)/i,
   /simulate\s+(being|a|an)/i,
   /system:\s*$/im,
@@ -112,30 +113,34 @@ function detectExcessiveRepetition(text: string): {
   sample?: string;
   count?: number;
 } {
-  const words = text.split(/\s+/);
-  const windowSize = 10;
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
+  const minWindowSize = 3;
+  const maxWindowSize = 10;
   
-  for (let i = 0; i < words.length - windowSize; i++) {
-    const window = words.slice(i, i + windowSize).join(' ');
-    let count = 1;
-    
-    let searchStart = i + windowSize;
-    while (searchStart < words.length - windowSize) {
-      const nextWindow = words.slice(searchStart, searchStart + windowSize).join(' ');
-      if (nextWindow === window) {
-        count++;
-        searchStart += windowSize;
-      } else {
-        break;
-      }
+  for (let windowSize = minWindowSize; windowSize <= maxWindowSize; windowSize++) {
+    if (words.length < windowSize * 2) {
+      continue;
     }
     
-    if (count > MAX_REPETITION_COUNT) {
-      return {
-        detected: true,
-        sample: window.substring(0, 50),
-        count,
-      };
+    for (let i = 0; i <= words.length - windowSize; i++) {
+      const window = words.slice(i, i + windowSize).join(' ');
+      let count = 1;
+      
+      for (let j = i + windowSize; j <= words.length - windowSize; j++) {
+        const nextWindow = words.slice(j, j + windowSize).join(' ');
+        if (nextWindow === window) {
+          count++;
+          j += windowSize - 1;
+        }
+      }
+      
+      if (count > MAX_REPETITION_COUNT) {
+        return {
+          detected: true,
+          sample: window.substring(0, 50),
+          count,
+        };
+      }
     }
   }
   
