@@ -31,6 +31,7 @@ import {
   parseCronFindings,
   parseMemoryIndex,
 } from './parse-logs.js';
+import { validateClientInput } from '../lib/security/index.js';
 
 export const DEFAULT_DASHBOARD_PORT = 3847;
 export const CRON_LOG_RELATIVE_PATH = 'logs/cron.log';
@@ -43,6 +44,8 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const ATTACHMENTS_DIR = '.attachments';
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 export const RATE_LIMIT_MAX_REQUESTS = 10;
+export const RATE_LIMIT_BURST_WINDOW_MS = 10_000;
+export const RATE_LIMIT_BURST_MAX_REQUESTS = 3;
 
 export type ChatTurnRunner = (options: {
   readonly repoRoot: string;
@@ -56,6 +59,7 @@ export type ChatTurnRunner = (options: {
 
 type RateLimitEntry = {
   readonly timestamps: number[];
+  readonly burstTimestamps: number[];
 };
 
 export type DashboardServerOptions = {
@@ -691,10 +695,12 @@ async function handleConfirmPost(
 
     chatInFlight = true;
     try {
+      const clientIp = req.socket.remoteAddress ?? 'unknown';
       const result = await runChat({
         repoRoot: options.repoRoot,
         userPrompt: pendingPrompt,
         confirmedForce: true,
+        clientId: clientIp,
         onAssistantDelta: withoutSegmentRecaps((text) => {
           writeSseEvent(res, { type: 'delta', text });
         }),
@@ -890,6 +896,15 @@ async function handleChatPost(
     return;
   }
 
+  const inputValidation = validateClientInput(body);
+  if (!inputValidation.valid) {
+    sendJson(res, 400, {
+      error: 'invalid_input',
+      message: inputValidation.reason ?? 'Invalid input',
+    });
+    return;
+  }
+
   const prompt = extractChatPrompt(body);
   if (prompt === undefined) {
     sendJson(res, 400, {
@@ -922,10 +937,12 @@ async function handleChatPost(
 
     chatInFlight = true;
     try {
+      const clientIp = req.socket.remoteAddress ?? 'unknown';
       const result = await runChat({
         repoRoot: options.repoRoot,
         userPrompt: pendingPrompt,
         confirmedForce: true,
+        clientId: clientIp,
         ...(threadId !== undefined ? { threadId } : {}),
         ...(attachments !== undefined ? { attachments } : {}),
         onAssistantDelta: withoutSegmentRecaps((text) => {
@@ -983,10 +1000,12 @@ async function handleChatPost(
 
   chatInFlight = true;
   try {
+    const clientIp = req.socket.remoteAddress ?? 'unknown';
     // Check build intent on the CURRENT message only, not with prepended context
     const result = await runChat({
       repoRoot: options.repoRoot,
       userPrompt: prompt,
+      clientId: clientIp,
       ...(context !== undefined ? { context } : {}),
       ...(threadId !== undefined ? { threadId } : {}),
       ...(attachments !== undefined ? { attachments } : {}),
@@ -1037,6 +1056,7 @@ async function defaultChatTurnRunner(options: {
   readonly threadId?: string;
   readonly attachments?: readonly string[];
   readonly onAssistantDelta?: (text: string) => void;
+  readonly clientId?: string;
 }): Promise<AgentTurnResult> {
   // Pass context/threadId to agent-turn; it will prepend AFTER build-intent check
   return await runAgentTurn({
@@ -1044,6 +1064,8 @@ async function defaultChatTurnRunner(options: {
     userPrompt: options.userPrompt,
     stream: true,
     safeMode: true,
+    channel: 'dashboard',
+    ...(options.clientId !== undefined ? { clientId: options.clientId } : {}),
     ...(options.confirmedForce !== undefined ? { confirmedForce: options.confirmedForce } : {}),
     ...(options.context !== undefined ? { context: options.context } : {}),
     ...(options.threadId !== undefined ? { threadId: options.threadId } : {}),
@@ -1321,7 +1343,7 @@ function checkRateLimit(clientId: string, rateLimitMap: Map<string, RateLimitEnt
   const entry = rateLimitMap.get(clientId);
   
   if (entry === undefined) {
-    rateLimitMap.set(clientId, { timestamps: [now] });
+    rateLimitMap.set(clientId, { timestamps: [now], burstTimestamps: [now] });
     return true;
   }
   
@@ -1329,12 +1351,23 @@ function checkRateLimit(clientId: string, rateLimitMap: Map<string, RateLimitEnt
     (ts) => now - ts < RATE_LIMIT_WINDOW_MS
   );
   
+  const recentBurstTimestamps = entry.burstTimestamps.filter(
+    (ts) => now - ts < RATE_LIMIT_BURST_WINDOW_MS
+  );
+  
+  if (recentBurstTimestamps.length >= RATE_LIMIT_BURST_MAX_REQUESTS) {
+    console.error(`[rate-limit] Burst limit exceeded for ${clientId}: ${recentBurstTimestamps.length} requests in ${RATE_LIMIT_BURST_WINDOW_MS}ms`);
+    return false;
+  }
+  
   if (recentTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    console.error(`[rate-limit] Rate limit exceeded for ${clientId}: ${recentTimestamps.length} requests in ${RATE_LIMIT_WINDOW_MS}ms`);
     return false;
   }
   
   recentTimestamps.push(now);
-  rateLimitMap.set(clientId, { timestamps: recentTimestamps });
+  recentBurstTimestamps.push(now);
+  rateLimitMap.set(clientId, { timestamps: recentTimestamps, burstTimestamps: recentBurstTimestamps });
   return true;
 }
 

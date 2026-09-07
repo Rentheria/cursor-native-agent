@@ -12,6 +12,14 @@ import {
   type TurnDebugReport,
 } from './debug.js';
 import {
+  resolveBudgetConfig,
+  getUsageStats,
+  checkBudgetExceeded,
+  recordCost,
+  sanitizePrompt,
+  type CostEntry,
+} from '../lib/security/index.js';
+import {
   extractDelegationSubtask,
   hasDelegationIntent,
 } from './delegation.js';
@@ -87,6 +95,14 @@ export interface AgentTurnOptions {
   readonly threadId?: string;
   /** Injected for tests; defaults to real `runCursorAgent`. */
   readonly runAgent?: AgentRunner;
+  /**
+   * Optional channel identifier for cost tracking and rate limiting.
+   */
+  readonly channel?: 'cli' | 'dashboard' | 'telegram' | 'cron';
+  /**
+   * Optional client ID for per-session cost tracking (e.g., IP address, chat ID).
+   */
+  readonly clientId?: string;
   /** Injected for tests; defaults to real `dispatchWorker`. */
   readonly runWorker?: WorkerDispatcher;
   /**
@@ -157,6 +173,36 @@ export async function runAgentTurn(
 
   if (userPrompt.trim() === '') {
     throw new Error('Empty prompt.');
+  }
+
+  const budget = resolveBudgetConfig();
+  const stats = await getUsageStats(repoRoot, budget, options.clientId);
+  const budgetCheck = checkBudgetExceeded(stats);
+  
+  if (budgetCheck.exceeded) {
+    const errorReply = `⚠️ Usage limit reached: ${budgetCheck.reason}. Please try again later.\n\nCurrent usage:\n- Hourly: ${Math.round(stats.hourlyUsageMs / 1000)}s / ${Math.round(budget.hourlyLimitMs / 1000)}s\n- Daily: ${Math.round(stats.dailyUsageMs / 1000)}s / ${Math.round(budget.dailyLimitMs / 1000)}s`;
+    
+    return {
+      reply: errorReply,
+      stderr: `[security] ${budgetCheck.reason}`,
+      exitCode: 1,
+    };
+  }
+
+  const sanitizationResult = sanitizePrompt(userPrompt);
+  
+  if (sanitizationResult.warnings.length > 0) {
+    console.error(`[security] Sanitization warnings: ${sanitizationResult.warnings.join(', ')}`);
+  }
+  
+  if (sanitizationResult.blocked) {
+    const blockedReply = '⚠️ Your request was blocked due to potential security concerns. Please rephrase your request without attempting to override system instructions.';
+    
+    return {
+      reply: blockedReply,
+      stderr: `[security] Blocked prompt: ${sanitizationResult.warnings.join('; ')}`,
+      exitCode: 1,
+    };
   }
 
   // Thread handling: create new thread or load existing
@@ -486,7 +532,18 @@ La confirmación expira en 10 minutos.`;
       trust: useTrust,
       ...streamRunnerOptions(options.stream === true, options.onAssistantDelta),
     });
-    cursorAgentMs += performance.now() - agentStart;
+    const agentDuration = performance.now() - agentStart;
+    cursorAgentMs += agentDuration;
+    
+    const costEntry: CostEntry = {
+      timestamp: Date.now(),
+      channel: options.channel ?? 'cli',
+      model: process.env['CURSOR_AGENT_MODEL'] ?? 'auto',
+      durationMs: Math.round(agentDuration),
+      ...(options.clientId !== undefined ? { clientId: options.clientId } : {}),
+    };
+    await recordCost(repoRoot, costEntry);
+    
     const reply = await finalizeAgentStdout(repoRoot, result.stdout, userPrompt);
     
     // Persist assistant reply to thread if applicable
