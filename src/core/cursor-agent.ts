@@ -13,7 +13,7 @@ import {
 } from '../lib/constants.js';
 import {
   formatCursorAgentSpawnError,
-  resolveCursorAgentBinary,
+  resolveCursorAgentInvocation,
 } from '../lib/resolve-cursor-agent.js';
 import { parseStreamJsonLine } from './stream-json.js';
 
@@ -57,11 +57,12 @@ export async function runCursorAgent(
       : promptOrOptions;
 
   const args = buildCursorAgentArgs(options, process.env);
-  const binary = resolveCursorAgentBinary();
-  logCursorAgentCall(binary, args);
+  const invocation = resolveCursorAgentInvocation();
+  const spawnArgs = [...invocation.prefixArgs, ...args];
+  logCursorAgentCall(invocation.command, spawnArgs);
 
   return await new Promise<CursorAgentRunResult>((resolve, reject) => {
-    const child = spawn(binary, args, {
+    const child = spawn(invocation.command, spawnArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       cwd: options.cwd,
@@ -110,7 +111,7 @@ export async function runCursorAgent(
       clearTimeout(timeoutHandle);
       finished = true;
       reject(
-        new Error(formatCursorAgentSpawnError(binary, error.message), {
+        new Error(formatCursorAgentSpawnError(invocation.command, error.message), {
           cause: error,
         }),
       );
@@ -154,12 +155,13 @@ export async function runCursorAgentLogged(
 ): Promise<CursorAgentRunResult> {
   await mkdir(path.dirname(options.logPath), { recursive: true });
   const args = buildCursorAgentArgs(options, process.env);
-  const binary = resolveCursorAgentBinary();
-  logCursorAgentCall(binary, args);
+  const invocation = resolveCursorAgentInvocation();
+  const spawnArgs = [...invocation.prefixArgs, ...args];
+  logCursorAgentCall(invocation.command, spawnArgs);
 
   return await new Promise<CursorAgentRunResult>((resolve, reject) => {
     const logStream = createWriteStream(options.logPath, { flags: 'a' });
-    const child = spawn(binary, args, {
+    const child = spawn(invocation.command, spawnArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       cwd: options.cwd,
@@ -208,7 +210,7 @@ export async function runCursorAgentLogged(
       finished = true;
       logStream.end();
       reject(
-        new Error(formatCursorAgentSpawnError(binary, error.message), {
+        new Error(formatCursorAgentSpawnError(invocation.command, error.message), {
           cause: error,
         }),
       );
