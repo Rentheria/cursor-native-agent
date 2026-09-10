@@ -591,6 +591,30 @@ Qué esperar:
 Patrón de dispatch desacoplado (log + wait + notify). Motor **solo**
 `cursor-agent` — sin cadena de fallback a otros CLIs.
 
+#### Harness multi-agente (N workers en paralelo/secuencia)
+
+Para orquestaciones más complejas, el **harness multi-agente** permite lanzar
+N workers (cada uno con su rol y prompt) en paralelo o secuencia:
+
+```bash
+# Modo paralelo (default)
+npm run harness
+
+# Modo secuencia
+npm run harness -- --sequence
+```
+
+El harness incluye:
+- **Timeout + retry:** cada task puede reintentar (config `retries`)
+- **Fail isolation:** un worker fallido no mata al padre ni a otros workers
+- **Merge de resultados:** resumen consolidado con estado de cada worker
+- **Tests mockeados:** tests sin red (`multi-agent-harness.test.ts`)
+
+Logs en `logs/workers/<ref>-<timestamp>.log`. Ideal para workflows complejos
+(ej: coder + reviewer, planner + executor, batch processing).
+
+Ver código: `src/orchestration/multi-agent-harness.ts` y ejemplos en `src/cli/harness.ts`.
+
 ### Canal Telegram (`npm run telegram`)
 
 Bot de Telegram por **long polling** (sin servidor público). Cada mensaje de

@@ -15,6 +15,7 @@
     "setup": "tsx src/cli/setup.ts",
     "agent": "tsx src/core/index.ts",
     "chat": "tsx src/core/index.ts --interactive",
+    "harness": "tsx src/cli/harness.ts",
     "cron": "tsx src/orchestration/cron-tick.ts",
     "cron:install": "tsx src/cli/cron-install.ts",
     "cron:uninstall": "tsx src/cli/cron-install.ts --uninstall",
