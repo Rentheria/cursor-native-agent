@@ -156,6 +156,11 @@ notificación cuando hay errores/warnings; ticks READY quedan en silencio en
 Si `cursor-agent` no está en `PATH`, exporta `CURSOR_AGENT_BIN_PATH` o
 instálalo según las instrucciones que `npm run setup` imprime.
 
+**Windows:** El wrapper detecta automáticamente instalaciones de cursor-agent en
+`%LOCALAPPDATA%\cursor-agent\versions\*` y resuelve la invocación correcta
+(node.exe + index.js) para evitar errores ENOENT con los wrappers .cmd. No se
+requiere configuración adicional.
+
 **Variables de entorno:** `npm run setup` crea `.env` automáticamente con
 defaults seguros (Composer 2.5 Fast, puerto 3847, chat habilitado, workspace
 en `<repo>/workspace`, Telegram omitido). Los exports del shell ganan sobre
