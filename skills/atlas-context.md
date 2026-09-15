@@ -53,12 +53,10 @@ import { ingest, query, FALTA_EL_DATO } from "agent-context-atlas";
 1. **Never invent measured numbers.** If the corpus does not contain the metric,
    the answer is exactly `falta el dato`. Do not estimate, interpolate, or fill in
    RAM, latency, tokens, IPs, or any other measured field.
-2. **Synthetic fixtures only.** Demo ids only: `host-demo-01`, `bot-alpha`
-   (and other atlas demo ids such as `bot-beta`, `role-coordinator`,
-   `role-operator`, `org-example`).
-3. **NEVER** point `atlas ingest` / `atlas query` at private vaults, PXE, real
-   hosts, home paths, inventories, or production machines. Do not invent hostnames
-   that look real.
+2. **Synthetic fixtures only.** Demo ids only: `host-demo-01`, `bot-alpha`.
+3. **NEVER** point `atlas ingest` / `atlas query` at private notes vaults, real
+   hosts, private inventories, or anything that fingerprints private
+   infrastructure. Do not invent hostnames that look real.
 4. Quote what the CLI printed. If `atlas` is not installed, say so and show the
    sibling/npm install — do not fake query results.
 

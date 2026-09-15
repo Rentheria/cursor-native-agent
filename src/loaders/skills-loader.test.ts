@@ -170,6 +170,9 @@ describe('skills-loader', () => {
     assert.match(atlas.body, /host-demo-01/);
     assert.match(atlas.body, /bot-alpha/);
     assert.match(atlas.body, /NEVER/i);
+    assert.match(atlas.body, /private notes vaults/);
+    assert.match(atlas.body, /fingerprints private infrastructure/);
+    assert.doesNotMatch(atlas.body, /PXE/i);
   });
 
   it('debería_matchear_atlas-context_por_trigger_atlas_query', async () => {
