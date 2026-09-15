@@ -951,6 +951,11 @@ forkear:
 
 Ver también “Fuera de alcance” en `ARCHITECTURE.md` y [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
+## Ver también
+
+Este agente puede consumir contexto externo de:
+
+- [agent-context-atlas](https://github.com/Rentheria/agent-context-atlas) — wiki + grafo tipado + RAG híbrido para contexto de agentes/máquinas. La skill [`atlas-context`](./skills/atlas-context.md) enseña el CLI `atlas` (`ingest` / `query`) solo contra fixtures sintéticos.
 
 ## Licencia
 
