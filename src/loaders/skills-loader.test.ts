@@ -171,7 +171,7 @@ describe('skills-loader', () => {
     assert.match(atlas.body, /bot-alpha/);
     assert.match(atlas.body, /NEVER/i);
     assert.match(atlas.body, /private notes vaults/);
-    assert.match(atlas.body, /fingerprints private infrastructure/);
+    assert.match(atlas.body, /fingerprints private\s+infrastructure/);
     assert.doesNotMatch(atlas.body, /PXE/i);
   });
 
