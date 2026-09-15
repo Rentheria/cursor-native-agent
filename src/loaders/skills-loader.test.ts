@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { selectRelevantSkills, type SemanticSkillOptions } from './skills-loader.js';
+import { loadAllSkills, selectRelevantSkills, type SemanticSkillOptions } from './skills-loader.js';
 import type { SkillDocument } from '../lib/types.js';
 import { createLocalTfidfRanker } from '../lib/embeddings/local-tfidf.js';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const mockSkills: readonly SkillDocument[] = [
   {
@@ -153,6 +157,31 @@ describe('skills-loader', () => {
     assert.ok(
       names.includes('clarify-build'),
       'clarify-build debería matchear "create" porque está en triggers',
+    );
+  });
+
+  it('debería_cargar_atlas-context_desde_skills_del_repo', async () => {
+    const skills = await loadAllSkills(repoRoot);
+    const atlas = skills.find((skill) => skill.name === 'atlas-context');
+    assert.ok(atlas, 'skills/atlas-context.md debe existir y parsear');
+    assert.ok(atlas.triggers.includes('atlas'));
+    assert.ok(atlas.triggers.includes('atlas query'));
+    assert.match(atlas.body, /falta el dato/);
+    assert.match(atlas.body, /host-demo-01/);
+    assert.match(atlas.body, /bot-alpha/);
+    assert.match(atlas.body, /NEVER/i);
+  });
+
+  it('debería_matchear_atlas-context_por_trigger_atlas_query', async () => {
+    const skills = await loadAllSkills(repoRoot);
+    const matched = await selectRelevantSkills(
+      'atlas query RAM_GB de host-demo-01',
+      skills,
+      { enabled: false },
+    );
+    assert.ok(
+      matched.some((skill) => skill.name === 'atlas-context'),
+      'atlas query debe disparar atlas-context por trigger exacto',
     );
   });
 });
