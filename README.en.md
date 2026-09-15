@@ -210,6 +210,12 @@ Open ideas — no dates or commitments:
 
 See also "Out of scope" in `ARCHITECTURE.md` and [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
+## See also
+
+This agent can consume external context from:
+
+- [agent-context-atlas](https://github.com/Rentheria/agent-context-atlas) — wiki + typed doc graph + hybrid RAG for agent/machine context. The [`atlas-context`](./skills/atlas-context.md) skill teaches the `atlas` CLI (`ingest` / `query`) against synthetic fixtures only.
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE). Copyright (c) 2026 Alejandro Rentheria.
