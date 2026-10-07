@@ -38,6 +38,18 @@ import {
 } from '../orchestration/worker-dispatch.js';
 import { WORKSPACE_DIRECTORY_NAME, WORKSPACE_PATH_ENV } from '../lib/constants.js';
 import {
+  formatLaunchProposal,
+  formatPanalStatus,
+  isPanalLaunchIntent,
+  isPanalStatusIntent,
+  listPanalRuns,
+  parsePanalProposalBlock,
+  proposeLaunch,
+  type LaunchDeps,
+  type LaunchProposal,
+} from '../lib/panal/index.js';
+import { isProtectedBranch, readGitBranch } from '../lib/panal/git-branch.js';
+import {
   createThread,
   appendToThread,
   buildThreadContext,
@@ -59,6 +71,7 @@ export type AgentRunner = (options: {
   readonly cwd?: string;
   readonly force?: boolean;
   readonly trust?: boolean;
+  readonly mode?: 'ask' | 'plan';
   readonly streamJson?: boolean;
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<CursorAgentRunResult>;
@@ -79,6 +92,12 @@ export interface AgentTurnResult {
    * before running with --force. The caller should ask for confirmation and re-run.
    */
   readonly requiresForceConfirmation?: boolean;
+  /**
+   * When true, a panal/Claude launch was proposed and must be confirmed
+   * (`/ok`) before anything is spawned.
+   */
+  readonly requiresLaunchConfirmation?: boolean;
+  readonly launchProposal?: LaunchProposal;
   /** Thread ID if this turn is part of a persisted conversation. */
   readonly threadId?: string;
 }
@@ -122,6 +141,18 @@ export interface AgentTurnOptions {
    * This bypasses the confirmation check and allows --force to be used.
    */
   readonly confirmedForce?: boolean;
+  /**
+   * Opt-in writes (`--force`). Default is read-only (`--mode ask`).
+   * Independent of build-intent detection.
+   */
+  readonly write?: boolean;
+  /**
+   * Run cursor-agent in this directory while memory/skills stay in repoRoot.
+   */
+  readonly targetDir?: string;
+  /** Injectable panal/Claude launcher bits for tests. */
+  readonly launchDeps?: LaunchDeps;
+  readonly listPanalRuns?: typeof listPanalRuns;
   /**
    * Override workspace path (e.g., for per-chat subdirectories in Telegram).
    * When set, this path is used instead of the default resolveWorkspacePath.
@@ -262,6 +293,24 @@ export async function runAgentTurn(
         };
       }
       
+      if (slashCommand.command === 'panal-status' || isPanalStatusIntent(userPrompt)) {
+        const status = await (options.listPanalRuns ?? listPanalRuns)();
+        const statusReply = formatPanalStatus(status);
+        if (effectiveThreadId !== undefined) {
+          await appendToThread(repoRoot, effectiveThreadId, 'assistant', statusReply);
+        }
+        return {
+          reply: statusReply,
+          stderr: '',
+          exitCode: status.ok ? 0 : 1,
+          ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
+        };
+      }
+
+      if (slashCommand.command === 'task' || slashCommand.command === 'panal') {
+        return await proposePanalTurn(options, repoRoot, userPrompt, effectiveThreadId);
+      }
+
       if (slashCommand.command === 'threads') {
         const threads = await listThreads(repoRoot);
         let threadsMessage = '# Threads\n\n';
@@ -286,6 +335,24 @@ export async function runAgentTurn(
           ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
         };
       }
+    }
+
+    if (isPanalStatusIntent(userPrompt)) {
+      const status = await (options.listPanalRuns ?? listPanalRuns)();
+      const statusReply = formatPanalStatus(status);
+      if (effectiveThreadId !== undefined) {
+        await appendToThread(repoRoot, effectiveThreadId, 'assistant', statusReply);
+      }
+      return {
+        reply: statusReply,
+        stderr: '',
+        exitCode: status.ok ? 0 : 1,
+        ...(effectiveThreadId !== undefined ? { threadId: effectiveThreadId } : {}),
+      };
+    }
+
+    if (isPanalLaunchIntent(userPrompt)) {
+      return await proposePanalTurn(options, repoRoot, userPrompt, effectiveThreadId);
     }
     
     // Parse @ mentions
@@ -489,17 +556,15 @@ La confirmación expira en 10 minutos.`;
       return confirmResult;
     }
     
-    // Prepend context/thread history AFTER build-intent check
-    // Thread context has priority over options.context (deprecated in favor of threads)
-    // Use cleaned prompt from mentions parsing, and append slash command args if present
+    // Always keep conversation history. Build-intent is decided on the
+    // current userPrompt only — never drop prior turns because they mention
+    // "build" / apps / dashboards.
     let effectivePrompt = slashCommand?.args !== undefined && slashCommand.args !== ''
       ? slashCommand.args
       : mentionsResult.cleanedPrompt;
-    if (threadContext !== '' && !isBuildRequest) {
-      // Thread history: prepend last N exchanges
+    if (threadContext !== '') {
       effectivePrompt = `Previous conversation:\n${threadContext}\n\nCurrent message:\n${userPrompt}`;
-    } else if (options.context !== undefined && !isBuildRequest) {
-      // Legacy context (dashboard): prepend previous turn
+    } else if (options.context !== undefined) {
       effectivePrompt = `Previous exchange:\nUser: ${options.context.userPrompt}\nAssistant: ${options.context.assistantReply}\n\nCurrent message:\n${userPrompt}`;
     }
     
@@ -512,11 +577,11 @@ La confirmación expira en 10 minutos.`;
       attachments: preparedAttachments,
     });
     
-    // Build requests get workspace cwd and --force (either CLI or confirmed safeMode).
-    // Non-build prompts in safeMode stay at repoRoot cwd with no --force.
-    const useCwd = isBuildRequest ? workspacePath : repoRoot;
-    const useForce = isBuildRequest || !safeMode;
+    const writeRequested = options.write === true || confirmedForce;
+    const useCwd = options.targetDir ?? (isBuildRequest ? workspacePath : repoRoot);
+    const useForce = writeRequested;
     const useTrust = true;
+    const useMode = writeRequested ? undefined : 'ask';
 
     if (isBuildRequest) {
       await mkdir(workspacePath, { recursive: true });
@@ -530,6 +595,7 @@ La confirmación expira en 10 minutos.`;
       cwd: useCwd,
       force: useForce,
       trust: useTrust,
+      ...(useMode !== undefined ? { mode: useMode } : {}),
       ...streamRunnerOptions(options.stream === true, options.onAssistantDelta),
     });
     const agentDuration = performance.now() - agentStart;
@@ -544,6 +610,18 @@ La confirmación expira en 10 minutos.`;
     };
     await recordCost(repoRoot, costEntry);
     
+    const parsedProposal = parsePanalProposalBlock(result.stdout);
+    if (parsedProposal !== undefined) {
+      const proposed = await proposePanalTurn(
+        options,
+        repoRoot,
+        userPrompt,
+        effectiveThreadId,
+        parsedProposal,
+      );
+      return proposed;
+    }
+
     const reply = await finalizeAgentStdout(repoRoot, result.stdout, userPrompt);
     
     // Persist assistant reply to thread if applicable
@@ -636,6 +714,54 @@ async function runDelegatedTurn(params: {
   const reply = await finalizeAgentStdout(params.repoRoot, result.stdout, params.userPrompt);
   const turnResult = { reply, stderr: result.stderr, exitCode: result.exitCode };
   return turnResult;
+}
+
+async function proposePanalTurn(
+  options: AgentTurnOptions,
+  repoRoot: string,
+  userPrompt: string,
+  threadId: string | undefined,
+  parsed?: LaunchProposal,
+): Promise<AgentTurnResult> {
+  const dir =
+    parsed?.dir ??
+    options.targetDir ??
+    options.workspacePath ??
+    resolveWorkspacePath(repoRoot);
+  const proposal =
+    parsed ??
+    proposeLaunch({
+      prompt: userPrompt,
+      dir,
+    });
+
+  if (proposal.mode === 'write' && isProtectedBranch(readGitBranch(proposal.dir))) {
+    const refused =
+      `Refusing write launch on protected branch \`main\`/\`master\` in \`${proposal.dir}\`. ` +
+      'Use a non-main branch or worktree, or ask for read-only.';
+    if (threadId !== undefined) {
+      await appendToThread(repoRoot, threadId, 'assistant', refused);
+    }
+    return {
+      reply: refused,
+      stderr: '',
+      exitCode: 0,
+      ...(threadId !== undefined ? { threadId } : {}),
+    };
+  }
+
+  const reply = formatLaunchProposal(proposal);
+  if (threadId !== undefined) {
+    await appendToThread(repoRoot, threadId, 'assistant', reply);
+  }
+  return {
+    reply,
+    stderr: '',
+    exitCode: 0,
+    requiresLaunchConfirmation: true,
+    launchProposal: proposal,
+    ...(threadId !== undefined ? { threadId } : {}),
+  };
 }
 
 function streamRunnerOptions(

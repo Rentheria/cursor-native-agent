@@ -15,6 +15,15 @@ import {
   consumePendingDashboardForce,
   cancelPendingDashboardForce,
 } from '../core/pending-force.js';
+import {
+  cancelPendingDashboardLaunch,
+  consumePendingDashboardLaunch,
+  formatLaunchResult,
+  hasPendingDashboardLaunch,
+  launchConfirmedTask,
+  setPendingDashboardLaunch,
+  type LaunchProposal,
+} from '../lib/panal/index.js';
 import { MEMORY_INDEX_FILE_NAME } from '../lib/constants.js';
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding } from '../lib/onboarding.js';
@@ -23,6 +32,7 @@ import {
   listThreads,
   deleteThread,
   renameThread,
+  appendToThread,
 } from '../lib/threads-store.js';
 import { renderDashboardHtml, type DashboardSnapshot } from './html.js';
 import { renderMarkdown } from './markdown.js';
@@ -57,6 +67,16 @@ export type ChatTurnRunner = (options: {
   readonly onAssistantDelta?: (text: string) => void;
 }) => Promise<AgentTurnResult>;
 
+export type LaunchRunner = (proposal: LaunchProposal) => Promise<{
+  readonly ok: boolean;
+  readonly refused?: boolean;
+  readonly runId?: string;
+  readonly command: string;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+}>;
+
 type RateLimitEntry = {
   readonly timestamps: number[];
   readonly burstTimestamps: number[];
@@ -73,6 +93,8 @@ export type DashboardServerOptions = {
   readonly chatEnabled?: boolean;
   /** Injected for tests; defaults to streaming `runAgentTurn`. */
   readonly runChatTurn?: ChatTurnRunner;
+  /** Injected for tests; defaults to `launchConfirmedTask`. */
+  readonly runLaunch?: LaunchRunner;
   /** Override listen port for origin checks (tests only). */
   readonly listenPort?: number;
   /** Override dashboard token for tests. */
@@ -679,6 +701,10 @@ async function handleConfirmPost(
   }
 
   if (action === 'ok') {
+    if (hasPendingDashboardLaunch()) {
+      await streamConfirmedLaunch(res, options);
+      return;
+    }
     const pendingPrompt = consumePendingDashboardForce();
     if (pendingPrompt === undefined) {
       beginSse(res);
@@ -736,6 +762,7 @@ async function handleConfirmPost(
   }
 
   if (action === 'no') {
+    cancelPendingDashboardLaunch();
     cancelPendingDashboardForce();
     beginSse(res);
     const cancelMessage = 'Confirmación cancelada. Podés enviar una nueva solicitud.';
@@ -754,6 +781,48 @@ async function handleConfirmPost(
     error: 'invalid_action',
     message: 'Action must be "ok" or "no".',
   });
+}
+
+async function streamConfirmedLaunch(
+  res: ServerResponse,
+  options: DashboardServerOptions,
+): Promise<void> {
+  const pending = consumePendingDashboardLaunch();
+  if (pending === undefined) {
+    beginSse(res);
+    writeSseEvent(res, {
+      type: 'error',
+      message: 'No hay lanzamiento pendiente (puede haber expirado). Enviá la tarea de nuevo.',
+    });
+    res.end();
+    return;
+  }
+
+  beginSse(res);
+  chatInFlight = true;
+  try {
+    const runLaunch = options.runLaunch ?? launchConfirmedTask;
+    const launched = await runLaunch(pending.proposal);
+    const reply = formatLaunchResult(launched);
+    if (pending.threadId !== undefined) {
+      await appendToThread(options.repoRoot, pending.threadId, 'assistant', reply);
+    }
+    const markdown = renderMarkdown(reply);
+    writeSseEvent(res, {
+      type: 'done',
+      reply,
+      markdown,
+      exitCode: launched.exitCode,
+      ...(pending.threadId !== undefined ? { threadId: pending.threadId } : {}),
+    });
+    res.end();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeSseEvent(res, { type: 'error', message });
+    res.end();
+  } finally {
+    chatInFlight = false;
+  }
 }
 
 async function handleMarkdownPost(
@@ -921,6 +990,10 @@ async function handleChatPost(
   // Check for confirmation commands
   const lowerPrompt = prompt.toLowerCase().trim();
   if (lowerPrompt === '/ok' || lowerPrompt === 'confirm' || lowerPrompt === '/confirm') {
+    if (hasPendingDashboardLaunch()) {
+      await streamConfirmedLaunch(res, options);
+      return;
+    }
     const pendingPrompt = consumePendingDashboardForce();
     if (pendingPrompt === undefined) {
       beginSse(res);
@@ -981,6 +1054,7 @@ async function handleChatPost(
 
   // Check for cancellation commands
   if (lowerPrompt === '/no' || lowerPrompt === 'cancel' || lowerPrompt === '/cancel') {
+    cancelPendingDashboardLaunch();
     cancelPendingDashboardForce();
     beginSse(res);
     const cancelMessage = 'Pending build confirmation cancelled. You can send a new request.';
@@ -1016,7 +1090,12 @@ async function handleChatPost(
     
     // If the result requires force confirmation, store the CURRENT prompt only (not with context)
     if (result.requiresForceConfirmation === true) {
+      cancelPendingDashboardLaunch();
       setPendingDashboardForce(prompt);
+    }
+    if (result.requiresLaunchConfirmation === true && result.launchProposal !== undefined) {
+      cancelPendingDashboardForce();
+      setPendingDashboardLaunch(result.launchProposal, result.threadId);
     }
     
     if (result.exitCode !== 0 || result.reply.trim() === '') {
@@ -1036,6 +1115,7 @@ async function handleChatPost(
       markdown,
       exitCode: result.exitCode,
       ...(result.requiresForceConfirmation === true ? { requiresForceConfirmation: true } : {}),
+      ...(result.requiresLaunchConfirmation === true ? { requiresLaunchConfirmation: true } : {}),
       ...(result.threadId !== undefined ? { threadId: result.threadId } : {}),
     });
     res.end();

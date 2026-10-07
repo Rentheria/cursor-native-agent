@@ -10,12 +10,14 @@ import {
   type WorkerDispatcher,
 } from './agent-turn.js';
 import type { CursorAgentRunResult } from './cursor-agent.js';
+import { appendToThread, createOrResetThread } from '../lib/threads-store.js';
 
 interface RunnerCall {
   readonly prompt: string;
   readonly cwd: string | undefined;
   readonly force: boolean | undefined;
   readonly trust: boolean | undefined;
+  readonly mode: 'ask' | 'plan' | undefined;
   readonly streamJson: boolean | undefined;
   readonly onAssistantDelta: ((text: string) => void) | undefined;
 }
@@ -31,6 +33,7 @@ function fakeRunner(
       cwd: options.cwd,
       force: options.force,
       trust: options.trust,
+      mode: options.mode,
       streamJson: options.streamJson,
       onAssistantDelta: options.onAssistantDelta,
     };
@@ -126,7 +129,8 @@ describe('runAgentTurn (pipeline directo)', () => {
     const sent = calls[0];
     assert.ok(sent !== undefined);
     assert.equal(sent.cwd, repoRoot);
-    assert.equal(sent.force, true, 'CLI mode should use force');
+    assert.equal(sent.force, false, 'CLI writes are opt-in');
+    assert.equal(sent.mode, 'ask');
     assert.equal(sent.trust, true, 'CLI mode should use trust');
     assert.match(sent.prompt, /## Memory index \(always loaded\)/);
     assert.match(sent.prompt, /House git rules/);
@@ -312,6 +316,7 @@ describe('runAgentTurn (pipeline directo)', () => {
     assert.ok(sent !== undefined);
     assert.equal(sent.cwd, repoRoot, 'Safe mode with non-build prompt should use repoRoot as cwd');
     assert.equal(sent.force, false, 'Safe mode with non-build prompt should not use force');
+    assert.equal(sent.mode, 'ask', 'Default should be read-only / ask');
     assert.equal(sent.trust, true, 'Safe mode should use trust');
     assert.equal(result.reply, 'respuesta segura');
   });
@@ -705,9 +710,9 @@ describe('runAgentTurn (confirmación de --force en safeMode)', () => {
     assert.equal(result.requiresForceConfirmation, undefined);
   });
 
-  it('CLI_debería_usar_force_sin_confirmación', async () => {
+  it('CLI_debería_usar_ask_por_defecto_sin_force', async () => {
     const repoRoot = await makeRepo();
-    const { runAgent, calls } = fakeRunner('calculadora creada');
+    const { runAgent, calls } = fakeRunner('calculadora en plan');
 
     const result = await runAgentTurn({
       repoRoot,
@@ -718,9 +723,29 @@ describe('runAgentTurn (confirmación de --force en safeMode)', () => {
     assert.equal(calls.length, 1);
     const sent = calls[0];
     assert.ok(sent !== undefined);
-    assert.equal(sent.force, true, 'CLI mode should use force without confirmation');
-    assert.equal(result.reply, 'calculadora creada');
+    assert.equal(sent.force, false, 'Writes are opt-in');
+    assert.equal(sent.mode, 'ask');
+    assert.equal(result.reply, 'calculadora en plan');
     assert.equal(result.requiresForceConfirmation, undefined);
+  });
+
+  it('CLI_write_opt_in_debería_pasar_force', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('calculadora creada');
+
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora',
+      runAgent,
+      write: true,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.equal(sent.force, true);
+    assert.equal(sent.mode, undefined);
+    assert.equal(result.reply, 'calculadora creada');
   });
 
   it('debería_usar_workspacePath_personalizado', async () => {
@@ -899,3 +924,77 @@ describe('memoria auto-persistida sin MEMORY_WRITE block', () => {
     assert.doesNotMatch(memoryIndex, /\/home\/usuario/);
   });
 });
+
+describe('runAgentTurn (historial + target + panal)', () => {
+  it('debería_preservar_historial_aunque_el_mensaje_actual_sea_un_build', async () => {
+    const repoRoot = await makeRepo();
+    await createOrResetThread(repoRoot, 't-hist');
+    await appendToThread(repoRoot, 't-hist', 'user', 'hola, estamos hablando del clima');
+    await appendToThread(repoRoot, 't-hist', 'assistant', 'El clima está bien.');
+
+    const { runAgent, calls } = fakeRunner('ok');
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'haz una calculadora',
+      threadId: 't-hist',
+      runAgent,
+      write: true,
+    });
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0];
+    assert.ok(sent !== undefined);
+    assert.match(sent.prompt, /Previous conversation/);
+    assert.match(sent.prompt, /clima/);
+    assert.match(sent.prompt, /haz una calculadora/);
+  });
+
+  it('debería_usar_targetDir_como_cwd_y_seguir_en_repoRoot_para_skills', async () => {
+    const repoRoot = await makeRepo();
+    const target = path.join(repoRoot, 'other-app');
+    await mkdir(target, { recursive: true });
+    const { runAgent, calls } = fakeRunner('en el target');
+
+    await runAgentTurn({
+      repoRoot,
+      userPrompt: 'summarize file MEMORY.md',
+      runAgent,
+      targetDir: target,
+    });
+
+    assert.equal(calls[0]?.cwd, target);
+  });
+
+  it('debería_proponer_panal_sin_lanzar', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('should not run');
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: '/task fix the pager with cursor',
+      runAgent,
+    });
+    assert.equal(calls.length, 0);
+    assert.equal(result.requiresLaunchConfirmation, true);
+    assert.equal(result.launchProposal?.agent, 'cursor');
+    assert.match(result.reply, /Nothing runs until you confirm/);
+  });
+
+  it('debería_listar_runs_de_panal_sin_llamar_al_modelo', async () => {
+    const repoRoot = await makeRepo();
+    const { runAgent, calls } = fakeRunner('no');
+    const result = await runAgentTurn({
+      repoRoot,
+      userPrompt: '/panal-status',
+      runAgent,
+      listPanalRuns: async () => ({
+        ok: true,
+        stdout: '1 done cursor pager',
+        stderr: '',
+        exitCode: 0,
+      }),
+    });
+    assert.equal(calls.length, 0);
+    assert.match(result.reply, /pager/);
+  });
+});
+

@@ -1,7 +1,21 @@
 import type { SlashCommand } from './types.js';
 import type { SkillDocument } from '../types.js';
 
-const BUILT_IN_COMMANDS = new Set(['help', 'clear', 'threads', 'attach', 'detach']);
+const BUILT_IN_COMMANDS = new Set([
+  'help',
+  'clear',
+  'threads',
+  'attach',
+  'detach',
+  'write',
+  'ask',
+  'ok',
+  'no',
+  'task',
+  'panal',
+  'panal-status',
+  'target',
+]);
 
 export function parseSlashCommand(
   prompt: string,
@@ -58,6 +72,12 @@ export function buildHelpMessage(skills: readonly SkillDocument[]): string {
     '- `/threads` — List all threads',
     '- `/attach <ruta>` — Add file(s) to session (subsequent turns)',
     '- `/detach` — Clear session attachments',
+    '- `/write` — Opt in to `--force` writes for this session (default is read-only/ask)',
+    '- `/ask` — Back to read-only (`--mode ask`)',
+    '- `/task <text>` — Propose a panal/Claude launch (asks for confirmation)',
+    '- `/panal-status` — List panal runs (`panal -history`)',
+    '- `/target <dir>` — Set the working repo for later turns (REPL)',
+    '- `/ok` / `/no` — Confirm or cancel a pending write or launch',
     '',
     '## Skills (via slash commands)',
     '',

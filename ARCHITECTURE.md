@@ -178,7 +178,7 @@ prompt → skills-loader → memory-loader → delegation? → prompt-builder �
 ```
 
 Diferencias por canal:
-- **CLI:** one-shot, `--force --trust` directo (usuario ya tipeó el prompt).
+- **CLI:** one-shot, `--trust` + `--mode ask` por defecto. `--force` solo con `--write` / `CURSOR_NATIVE_AGENT_WRITE=1` / `/write`. Prompt por stdin (Windows ENAMETOOLONG). `--target <dir>` cambia el cwd, no la memoria.
 - **Dashboard:** modo seguro (`--trust`, sin `--force` hasta confirmar), workspace en `<repo>/workspace/`.
 - **Telegram:** modo seguro (`--trust`, sin `--force` hasta confirmar), workspace aislado por chat en `workspace/telegram/<chatId>/`.
 - **Cron:** `--mode ask` (nunca escribe), sin workspace override.

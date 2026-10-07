@@ -8,6 +8,8 @@ export const CURSOR_AGENT_BINARY = 'cursor-agent';
 export const CURSOR_AGENT_BIN_PATH_ENV = 'CURSOR_AGENT_BIN_PATH';
 /** Env override for model: when set and not empty/auto, passes `--model <id>` to cursor-agent. */
 export const CURSOR_AGENT_MODEL_ENV = 'CURSOR_AGENT_MODEL';
+/** Opt-in writes: when `1`/`true`/`on`, CLI/REPL pass `--force`. Default is read-only (`--mode ask`). */
+export const CURSOR_NATIVE_AGENT_WRITE_ENV = 'CURSOR_NATIVE_AGENT_WRITE';
 /** Env override for workspace path: where user projects are built. */
 export const WORKSPACE_PATH_ENV = 'WORKSPACE_PATH';
 export const CURSOR_AGENT_PRINT_FLAG = '-p';
