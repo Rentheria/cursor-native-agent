@@ -243,11 +243,9 @@ fallback`. Desactiva el fallback con `CURSOR_NATIVE_AGENT_SEMANTIC_SKILLS=0`.
 
 ## Sobre el modelo y el billing
 
-- **Modelo por defecto:** **Composer 2.5 Fast** — el onboarding configura
-  `CURSOR_AGENT_MODEL=composer-2.5-fast` por default para tono consistente.
-  Si querés usar Auto (selección automática de modelo de Cursor),
-  seteá `CURSOR_AGENT_MODEL=auto` en el shell o editalo en `.env`. Para otros modelos,
-  exportá `CURSOR_AGENT_MODEL=<id>`. Lista de IDs: `cursor-agent models`.
+- **Modelo por defecto:** el guardado de **cursor-agent** (no se pinnea Composer).
+  `CURSOR_AGENT_MODEL` vacío/ausente = no se pasa `--model`. `auto` = Auto del CLI.
+  Otro id: `CURSOR_AGENT_MODEL=<id>`. Lista: `cursor-agent models`.
 - **Billing:** el uso corre en tu cuenta/subscripción de Cursor. No es un
   servicio separado; es TU agente personal corriendo sobre TU cuenta.
 
@@ -293,7 +291,7 @@ Este es un **agente personal localhost**, no un producto SaaS multi-tenant.
 | Comando | Qué hace | Env vars |
 |---|---|---|
 | `npm run setup` | Instala deps, crea .env, chequea cursor-agent, crea workspace/ | Ninguna requerida |
-| `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (default: composer-2.5-fast; seteá a `auto` para Auto), `CURSOR_NATIVE_AGENT_DEBUG=1` |
+| `npm run agent -- "<prompt>"` | Orquesta skills + memoria y llama `cursor-agent -p` | Opcional: `CURSOR_AGENT_BIN_PATH`, `CURSOR_AGENT_MODEL` (vacío = default del CLI), `--write`, `--target <dir>`, `CURSOR_NATIVE_AGENT_DEBUG=1` |
 | `npm run dashboard` | Observatorio HTTP en `127.0.0.1` (logs + MEMORY + chat) | `PORT` (default `3847`). Chat habilitado por defecto; `CURSOR_NATIVE_AGENT_DASHBOARD_CHAT=0` para solo lectura |
 | `npm run cron` / `scripts/cron-tick.sh` | Health check real + triage en modo `ask` (Linux/macOS) | Wrapper carga nvm/`~/.local/bin`. Systemd (Linux): setea `HOME` y `PATH` (ver abajo) |
 | `npm run cron:install` | Instala cron job para ticks desatendidos (weekdays 9:00 AM, `--check-only`) | `CURSOR_NATIVE_AGENT_CRON_SCHEDULE` (default: `0 9 * * 1-5`) |

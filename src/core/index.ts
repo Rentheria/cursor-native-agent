@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { loadRepoEnv } from '../lib/load-env.js';
 import { maybeRunOnboarding, ensureDefaultConfig } from '../lib/onboarding.js';
+import { isWriteEnvEnabled, targetThreadId } from '../lib/target-thread.js';
 import {
   isDebugEnabled,
   runAgentTurn,
@@ -30,6 +31,8 @@ Usage:
   cursor-native-agent -i                      Alias for --interactive
   cursor-native-agent --debug "<prompt>"      Run with debug output
   cursor-native-agent --attach <file> "<prompt>"  Attach file(s) to prompt
+  cursor-native-agent --target <dir> "<prompt>"   Run in another repo (memory/skills stay here)
+  cursor-native-agent --write "<prompt>"      Opt in to --force writes (default is read-only)
   cursor-native-agent --help                  Show this help
   cursor-native-agent -h                      Alias for --help
 
@@ -42,6 +45,8 @@ Flags:
   --debug             Enable debug logging
   --yes, -y           Skip onboarding prompts (use defaults)
   --attach <file>     Attach file(s) to the prompt (can be used multiple times)
+  --target <dir>      cwd for cursor-agent; memory/skills stay in this wrapper repo
+  --write, --force    Opt in to writes (--force). Default is --mode ask
   --help, -h          Show this help
 
 @ Mentions (Cursor IDE-style):
@@ -75,18 +80,15 @@ File Attachments:
   • Use /attach <ruta> mid-session to add more files
   • Use /detach to clear session attachments
 
-Build Execution Modes / Modos de ejecución de builds:
-  • CLI one-shot (terminal):
-    → Builds run with --force immediately (direct)
-    → Always uses --trust for cursor-agent tooling
-  • CLI interactive (REPL):
-    → Same as one-shot: builds run with --force immediately
-    → Maintains thread history across sessions (thread ID: cli-repl)
-    → All turns use full pipeline: skills + memory + attachments + @ mentions
-  • Dashboard/Telegram (safeMode):
-    → Builds require user confirmation: Confirmar/Cancelar (or /ok /no)
-    → --force applied only after explicit confirmation
-    → Always uses --trust for cursor-agent tooling
+Write permission (opt-in):
+  • Default: read-only (--mode ask). No --force unless you pass --write,
+    set CURSOR_NATIVE_AGENT_WRITE=1, or type /write in the REPL.
+  • Dashboard/Telegram still ask Confirmar before --force.
+  • Panal/Claude launches always ask for /ok first. Writes on main are refused.
+
+  --target <dir>:
+    Run cursor-agent in that repo. Memory + skills stay in this wrapper.
+    REPL threads are per-target (cli-<slug>-<hash>).
 
 Examples:
   cursor-native-agent "summarize MEMORY.md"
@@ -118,6 +120,8 @@ async function main(): Promise<void> {
   
   const attachments: string[] = [];
   const filteredArgs: string[] = [];
+  let targetDir: string | undefined;
+  let write = isWriteEnvEnabled();
   let i = 0;
   while (i < args.length) {
     const arg = args[i];
@@ -127,6 +131,16 @@ async function main(): Promise<void> {
       if (nextArg !== undefined) {
         attachments.push(nextArg);
       }
+      i += 1;
+    } else if (arg === '--target' && i + 1 < args.length) {
+      i += 1;
+      const nextArg = args[i];
+      if (nextArg !== undefined) {
+        targetDir = path.isAbsolute(nextArg) ? nextArg : path.resolve(process.cwd(), nextArg);
+      }
+      i += 1;
+    } else if (arg === '--write' || arg === '--force') {
+      write = true;
       i += 1;
     } else if (arg !== '-i' && arg !== '--interactive' && arg !== undefined) {
       filteredArgs.push(arg);
@@ -148,6 +162,8 @@ async function main(): Promise<void> {
     const { runRepl } = await import('./repl.js');
     await runRepl(repoRoot, { 
       debug,
+      write,
+      ...(targetDir !== undefined ? { targetDir } : {}),
       ...(attachments.length > 0 ? { attachments } : {}),
     });
     return;
@@ -166,7 +182,11 @@ async function main(): Promise<void> {
     repoRoot,
     userPrompt,
     debug,
+    write,
     stream: true,
+    ...(targetDir !== undefined
+      ? { targetDir, threadId: targetThreadId(targetDir) }
+      : {}),
     ...(attachments.length > 0 ? { attachments } : {}),
     onAssistantDelta: withoutSegmentRecaps((text) => {
       liveReply.pushDelta(text);

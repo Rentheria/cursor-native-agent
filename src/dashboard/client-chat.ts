@@ -500,7 +500,7 @@ export function chatClientScript(): string {
                   assistantEl.textContent = finalText;
                 }
                 
-                if (payload.requiresForceConfirmation === true) {
+                if (payload.requiresForceConfirmation === true || payload.requiresLaunchConfirmation === true) {
                   assistantEl.classList.add('confirm-prompt');
                   
                   var actions = document.createElement('div');
