@@ -12,6 +12,7 @@ import {
   type AgentTurnResult,
 } from './agent-turn.js';
 import { withoutSegmentRecaps } from './assistant-delta-stream.js';
+import { isVerbose } from '../lib/diag.js';
 import { stripDebugFlags } from './debug.js';
 import {
   createStdoutLiveReply,
@@ -105,7 +106,11 @@ async function main(): Promise<void> {
   loadRepoEnv(repoRoot);
 
   const rawArgs = process.argv.slice(2);
-  
+
+  if (isDebugEnabled(rawArgs)) {
+    process.env.CURSOR_NATIVE_AGENT_VERBOSE = '1';
+  }
+
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
     showHelp();
     return;
@@ -179,13 +184,13 @@ function writeAgentResult(
   result: AgentTurnResult,
   liveReply: StdoutLiveReply,
 ): void {
-  if (result.stderr.trim() !== '') {
+  if (result.stderr.trim() !== '' && (result.exitCode !== 0 || isVerbose())) {
     console.error(result.stderr.trimEnd());
   }
 
   if (result.exitCode !== 0) {
     console.error(
-      `[agent] cursor-agent exited with code ${String(result.exitCode)}`,
+      `[orquestador] cursor-agent terminó con código ${String(result.exitCode)}`,
     );
     process.exitCode = result.exitCode;
   }

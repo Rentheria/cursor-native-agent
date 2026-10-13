@@ -14,6 +14,8 @@ import { loadAllSkills } from '../loaders/skills-loader.js';
 import { parseSlashCommand, buildHelpMessage } from '../lib/mentions/index.js';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { isVerbose, diag } from '../lib/diag.js';
+import { startSpinner } from './spinner.js';
 
 export interface ReplOptions {
   readonly debug?: boolean;
@@ -78,25 +80,39 @@ export async function runRepl(
   const debug = options.debug === true;
   const sessionAttachments: string[] = [...(options.attachments ?? [])];
 
-  console.error('[agent] Starting interactive mode...');
-  console.error(`[agent] Thread: ${CLI_THREAD_ID} (persists across sessions)`);
-  console.error('[agent] Type /help for commands, exit to quit');
+  console.error('Orquestador listo · escribe tu mensaje (/help comandos, /clear limpiar, exit salir)');
+  diag(`Thread: ${CLI_THREAD_ID} (persists across sessions)`);
   if (sessionAttachments.length > 0) {
-    console.error(`[agent] Initial attachments: ${sessionAttachments.join(', ')}`);
+    diag(`Initial attachments: ${sessionAttachments.join(', ')}`);
   }
 
   const rl = createInterface({ input, output });
+  // Ctrl+C / Ctrl+D (or piped input ending) closes readline; leave quietly instead of erroring.
+  let inputClosed = false;
+  rl.on('close', () => {
+    inputClosed = true;
+  });
 
   try {
     while (true) {
-      const userInput = await rl.question('prompt> ');
+      const promptText = process.stdout.isTTY ? '\n\x1b[36m› \x1b[0m' : '\n› ';
+      let userInput: string;
+      try {
+        userInput = await rl.question(promptText);
+      } catch (error: unknown) {
+        if (inputClosed) {
+          console.error('\nHasta luego.');
+          break;
+        }
+        throw error;
+      }
       const trimmed = userInput.trim();
 
       if (!trimmed) continue;
 
       // Handle exit commands
       if (trimmed === 'exit' || trimmed === '.exit' || trimmed === '/exit') {
-        console.error('[agent] Goodbye!');
+        console.error('Hasta luego.');
         break;
       }
 
@@ -112,11 +128,7 @@ export async function runRepl(
 
         if (slashCommand.command === 'clear') {
           const deleted = await deleteThread(repoRoot, CLI_THREAD_ID);
-          if (deleted) {
-            console.error(`[agent] Thread ${CLI_THREAD_ID} cleared. Starting fresh.`);
-          } else {
-            console.error(`[agent] Thread ${CLI_THREAD_ID} was already empty or didn't exist.`);
-          }
+          console.error(deleted ? 'Conversación limpiada.' : 'La conversación ya estaba vacía.');
           continue;
         }
 
@@ -140,6 +152,8 @@ export async function runRepl(
 
       // Not a local command, pass to agent via runAgentTurn
       const liveReply = createStdoutLiveReply();
+      const spinner = startSpinner('pensando…');
+      let firstDelta = true;
       try {
         const result = await runAgentTurn({
           repoRoot,
@@ -149,12 +163,20 @@ export async function runRepl(
           stream: true,
           ...(sessionAttachments.length > 0 ? { attachments: sessionAttachments } : {}),
           onAssistantDelta: withoutSegmentRecaps((text) => {
+            if (firstDelta) {
+              spinner.stop();
+              firstDelta = false;
+              process.stdout.write('\n');
+            }
             liveReply.pushDelta(text);
           }),
         });
 
+        spinner.stop();
         writeAgentResult(result, liveReply);
+        process.stdout.write('\n');
       } catch (error: unknown) {
+        spinner.stop();
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[agent] Error: ${message}`);
       }
@@ -223,13 +245,13 @@ function writeAgentResult(
   result: AgentTurnResult,
   liveReply: StdoutLiveReply,
 ): void {
-  if (result.stderr.trim() !== '') {
+  if (result.stderr.trim() !== '' && (result.exitCode !== 0 || isVerbose())) {
     console.error(result.stderr.trimEnd());
   }
 
   if (result.exitCode !== 0) {
     console.error(
-      `[agent] cursor-agent exited with code ${String(result.exitCode)}`,
+      `[orquestador] cursor-agent terminó con código ${String(result.exitCode)}`,
     );
   }
 
