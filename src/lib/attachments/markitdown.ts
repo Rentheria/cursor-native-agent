@@ -19,6 +19,7 @@ export async function convertPdfWithMarkItDown(
     const args = [pdfPath];
     const child = spawn(binary, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     let stdout = '';
