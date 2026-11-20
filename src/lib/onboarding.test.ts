@@ -119,7 +119,7 @@ describe('onboarding', () => {
   describe('getDefaultConfig', () => {
     it('returns expected defaults', () => {
       const config = getDefaultConfig();
-      assert.strictEqual(config.CURSOR_AGENT_MODEL, 'composer-2.5-fast');
+      assert.strictEqual(config.CURSOR_AGENT_MODEL, '');
       assert.strictEqual(config.PORT, '3847');
       assert.strictEqual(config.CURSOR_NATIVE_AGENT_DASHBOARD_CHAT, '1');
       assert.strictEqual(config.CURSOR_NATIVE_AGENT_SEMANTIC_MEMORY, '1');
@@ -147,7 +147,8 @@ describe('onboarding', () => {
         const envPath = path.join(tmpRoot, '.env');
         assert.ok(existsSync(envPath), '.env file should exist');
         const content = readFileSync(envPath, 'utf8');
-        assert.ok(content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+        assert.ok(!content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+        assert.ok(content.includes('cursor-agent uses its own saved default'));
         assert.ok(content.includes('PORT=3847'));
         assert.ok(content.includes('CURSOR_NATIVE_AGENT_ONBOARDED=1'));
         assert.ok(content.includes('WORKSPACE_PATH='));
@@ -230,7 +231,8 @@ describe('onboarding', () => {
         
         const content = readFileSync(envPath, 'utf8');
         assert.ok(content.includes('CURSOR_NATIVE_AGENT_ONBOARDED=1'));
-        assert.ok(content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+        assert.ok(!content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+        assert.ok(content.includes('cursor-agent uses its own saved default'));
       } finally {
         rmSync(tmpRoot, { recursive: true, force: true });
       }
@@ -265,7 +267,8 @@ describe('onboarding', () => {
         assert.strictEqual(wasWritten, true, 'should return true when .env lacks marker');
         const content = readFileSync(envPath, 'utf8');
         assert.ok(content.includes('CURSOR_NATIVE_AGENT_ONBOARDED=1'));
-        assert.ok(content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+        assert.ok(!content.includes('CURSOR_AGENT_MODEL=composer-2.5-fast'));
+        assert.ok(content.includes('cursor-agent uses its own saved default'));
       } finally {
         rmSync(tmpRoot, { recursive: true, force: true });
       }

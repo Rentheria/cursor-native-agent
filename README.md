@@ -18,11 +18,10 @@ orquestación multi-agente.
 billing). El cerebro es `cursor-agent` (CLI de Cursor); este paquete TypeScript
 solo arma el contexto (skills + memoria) y delega todo el razonamiento.
 
-**Modelo por defecto:** **Composer 2.5 Fast** — pinneado en `.env.example` vía
-`CURSOR_AGENT_MODEL=composer-2.5-fast` para tono consistente. Quitá esa línea,
-seteala a `auto`, o exportá tu propio modelo con `CURSOR_AGENT_MODEL=<id>`
-(correlo con `cursor-agent models` para ver IDs disponibles) — si está vacía o
-ausente, cursor-agent usa Auto.
+**Modelo por defecto:** el de **cursor-agent** (el que guardaste en el CLI;
+p. ej. Grok 4.7 High). Este wrapper **no** pasa `--model` a menos que
+`CURSOR_AGENT_MODEL` esté seteada y no sea `auto`. No pinneamos Composer.
+Para forzar un id: `CURSOR_AGENT_MODEL=<id>` (`cursor-agent models`).
 
 **Cómo empezar en 3 pasos:**
 
@@ -139,8 +138,8 @@ npm run agent -- "summarize file MEMORY.md"
 npm run cron:install
 ```
 
-`npm run setup` crea `.env` con defaults seguros (modelo Composer 2.5 Fast,
-Telegram omitido) e intenta instalar **MarkItDown automáticamente** para soporte
+`npm run setup` crea `.env` con defaults seguros (sin pin de modelo, Telegram
+omitido) e intenta instalar **MarkItDown automáticamente** para soporte
 de PDFs (requiere Python + pip). Si Python no está disponible, muestra
 instrucciones claras y continúa sin fallar — el agente funciona sin PDFs.
 Si corrés con TTY, te pregunta por el workspace path
@@ -156,22 +155,34 @@ notificación cuando hay errores/warnings; ticks READY quedan en silencio en
 Si `cursor-agent` no está en `PATH`, exporta `CURSOR_AGENT_BIN_PATH` o
 instálalo según las instrucciones que `npm run setup` imprime.
 
-**Windows:** El wrapper detecta automáticamente instalaciones de cursor-agent en
-`%LOCALAPPDATA%\cursor-agent\versions\*` y resuelve la invocación correcta
-(node.exe + index.js) para evitar errores ENOENT con los wrappers .cmd. No se
-requiere configuración adicional.
+**Windows (PowerShell 5.1 + Node 24 + installer oficial):**
+
+1. Instalá `cursor-agent` con `irm 'https://cursor.com/install?win32=true' | iex`
+   y después `cursor-agent login`.
+2. El wrapper elige la **versión más nueva** en
+   `%LOCALAPPDATA%\cursor-agent\versions\*` y spawnea `node.exe` + `index.js`
+   (nunca el shim `.cmd`/`.ps1`, que da `spawn EINVAL`).
+3. El prompt armado (memoria + skills + historial) va por **stdin**, no como
+   argumento — evita `spawn ENAMETOOLONG` (~32K en CreateProcess).
+4. Timeouts usan `taskkill /T /F` para matar el árbol. Un exit normal **no**
+   intenta `kill` (nada de stack traces `ESRCH`).
+5. `npm test` no depende de `find`/`xargs` (funciona en PowerShell).
+6. Escrituras son opt-in: por defecto `--mode ask`. `--write` o
+   `CURSOR_NATIVE_AGENT_WRITE=1` o `/write` en el REPL.
+7. `--target D:\otro\repo` corre cursor-agent ahí; memoria/skills siguen en
+   este wrapper. Cada target tiene su thread (`cli-<slug>-<hash>`).
+
+Si el binario no se detecta: `$env:CURSOR_AGENT_BIN_PATH="C:\Users\...\versions\<ver>\node.exe"`
+no hace falta — con el layout oficial alcanza.
 
 **Variables de entorno:** `npm run setup` crea `.env` automáticamente con
-defaults seguros (Composer 2.5 Fast, puerto 3847, chat habilitado, workspace
+defaults seguros (sin `--model`, puerto 3847, chat habilitado, workspace
 en `<repo>/workspace`, Telegram omitido). Los exports del shell ganan sobre
-el archivo. Para personalizar, edita `.env` directamente o corre
-`npm run onboard` para el flujo interactivo:
+el archivo. Para personalizar, edita `.env` o corre `npm run onboard`.
 
-**Cambiar modelo:** el default es Composer 2.5 Fast (`CURSOR_AGENT_MODEL=composer-2.5-fast`
-en `.env.example`). Para usar otro modelo, exportá `CURSOR_AGENT_MODEL=<id>` en
-el shell o editalo en `.env`. Setealo a `auto` o dejalo vacío para que
-cursor-agent use Auto (su default sin `--model`). Lista de IDs:
-`cursor-agent models`.
+**Cambiar modelo:** no hay default de Composer. Si `CURSOR_AGENT_MODEL` está
+vacía o ausente, cursor-agent usa **su** default guardado. Para pinnear:
+`CURSOR_AGENT_MODEL=<id>`. `auto` = Auto del CLI. IDs: `cursor-agent models`.
 
 Telegram requiere config obligatoria (`TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_ALLOWED_CHAT_IDS`) — el bot falla cerrado sin esas vars. Configúralo
@@ -339,6 +350,46 @@ Qué esperar:
 - Cada respuesta sale por stdout; errores del CLI por stderr.
 
 También: `cursor-native-agent --interactive` / `-i` si lo instalaste global.
+
+Flags útiles:
+
+```bash
+# Read-only (default) vs escrituras
+cursor-native-agent --interactive
+cursor-native-agent --write --interactive          # opt-in --force
+cursor-native-agent --target D:\repos\app -i       # cwd ajeno; memoria local
+
+# En el REPL
+# /write  /ask  /target <dir>  /task <texto>  /panal-status  /ok  /no
+```
+
+### Panal / Claude (lanzamiento confirmado)
+
+Desde el REPL o el chat del dashboard podés pedir una tarea. El agente
+**propone** (cursor, agy, claude o auto), el modo (read-only o write en
+rama/worktree que no sea `main`) y el timeout, y **espera `/ok`**.
+
+Nada se lanza sin confirmación. Writes en `main`/`master` se rechazan.
+
+Al confirmar:
+
+- cursor / agy / auto → `panal delegate -d DIR -f task.md -c <chain> [-r] -t <min>m`
+  (fork: https://github.com/Rentheria/panal, branch `cursor/cursor-agent-support-abff`)
+- claude → `claude -p --permission-mode plan` (read-only)
+
+Después: `/panal-status` llama `panal -history` (fallback `panal -once`).
+El dashboard localhost (token) usa el mismo flujo Confirmar/Cancelar.
+
+```bash
+# En el REPL o el chat
+/task review the pager with cursor, read-only, 15 min
+# → propuesta → /ok
+
+/panal-status
+```
+
+Requisitos: `panal` y/o `claude` en PATH. Override: `PANAL_BIN`, `CLAUDE_BIN`.
+No se commitean secretos ni se loguean tokens.
 
 ### Loop autónomo (cron)
 

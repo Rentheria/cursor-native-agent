@@ -78,6 +78,13 @@ describe('parseSlashCommand', () => {
     assert.equal(result.args, '');
   });
 
+  test('parses built-in write ask task panal-status', () => {
+    assert.equal(parseSlashCommand('/write', mockSkills)?.command, 'write');
+    assert.equal(parseSlashCommand('/ask', mockSkills)?.command, 'ask');
+    assert.equal(parseSlashCommand('/task fix pager', mockSkills)?.args, 'fix pager');
+    assert.equal(parseSlashCommand('/panal-status', mockSkills)?.command, 'panal-status');
+  });
+
   test('parses skill command', () => {
     const result = parseSlashCommand('/git-commit fix bug', mockSkills);
     assert.ok(result !== undefined);
@@ -115,6 +122,9 @@ describe('buildHelpMessage', () => {
     assert.ok(help.includes('/threads'));
     assert.ok(help.includes('/attach'));
     assert.ok(help.includes('/detach'));
+    assert.ok(help.includes('/write'));
+    assert.ok(help.includes('/task'));
+    assert.ok(help.includes('/panal-status'));
   });
 
   test('includes skills', () => {

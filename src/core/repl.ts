@@ -1,5 +1,8 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 import { runAgentTurn, type AgentTurnResult } from './agent-turn.js';
 import { withoutSegmentRecaps } from './assistant-delta-stream.js';
 import {
@@ -12,18 +15,24 @@ import {
 } from '../lib/threads-store.js';
 import { loadAllSkills } from '../loaders/skills-loader.js';
 import { parseSlashCommand, buildHelpMessage } from '../lib/mentions/index.js';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
+import {
+  cancelPendingReplLaunch,
+  consumePendingReplLaunch,
+  formatLaunchResult,
+  hasPendingReplLaunch,
+  isCancelCommand,
+  isConfirmCommand,
+  launchConfirmedTask,
+  setPendingReplLaunch,
+} from '../lib/panal/index.js';
+import { isWriteEnvEnabled, targetThreadId } from '../lib/target-thread.js';
 
 export interface ReplOptions {
   readonly debug?: boolean;
   readonly attachments?: readonly string[];
+  readonly write?: boolean;
+  readonly targetDir?: string;
 }
-
-/**
- * CLI thread ID constant - all REPL sessions share this thread.
- */
-const CLI_THREAD_ID = 'cli-repl';
 
 /**
  * Prints available slash commands and skills to stderr.
@@ -37,7 +46,7 @@ async function printHelp(repoRoot: string): Promise<void> {
 /**
  * Prints thread list to stderr.
  */
-async function printThreads(repoRoot: string): Promise<void> {
+async function printThreads(repoRoot: string, currentThreadId: string): Promise<void> {
   const threads = await listThreads(repoRoot);
   if (threads.length === 0) {
     console.error('\nNo threads found.');
@@ -45,7 +54,7 @@ async function printThreads(repoRoot: string): Promise<void> {
   }
   console.error('\n# Threads\n');
   for (const thread of threads) {
-    const indicator = thread.id === CLI_THREAD_ID ? ' (current)' : '';
+    const indicator = thread.id === currentThreadId ? ' (current)' : '';
     console.error(
       `- ${thread.id}: "${thread.title}" (${String(thread.messageCount)} messages)${indicator}`,
     );
@@ -77,9 +86,18 @@ export async function runRepl(
 ): Promise<void> {
   const debug = options.debug === true;
   const sessionAttachments: string[] = [...(options.attachments ?? [])];
+  let writeEnabled = options.write === true || isWriteEnvEnabled();
+  let targetDir = options.targetDir;
+  let threadId = targetThreadId(targetDir);
 
   console.error('[agent] Starting interactive mode...');
-  console.error(`[agent] Thread: ${CLI_THREAD_ID} (persists across sessions)`);
+  console.error(`[agent] Thread: ${threadId} (persists across sessions)`);
+  console.error(
+    `[agent] Writes: ${writeEnabled ? 'ON (--force)' : 'OFF (read-only / --mode ask)'}. /write to enable, /ask to disable.`,
+  );
+  if (targetDir !== undefined) {
+    console.error(`[agent] Target: ${targetDir}`);
+  }
   console.error('[agent] Type /help for commands, exit to quit');
   if (sessionAttachments.length > 0) {
     console.error(`[agent] Initial attachments: ${sessionAttachments.join(', ')}`);
@@ -111,17 +129,70 @@ export async function runRepl(
         }
 
         if (slashCommand.command === 'clear') {
-          const deleted = await deleteThread(repoRoot, CLI_THREAD_ID);
+          const deleted = await deleteThread(repoRoot, threadId);
           if (deleted) {
-            console.error(`[agent] Thread ${CLI_THREAD_ID} cleared. Starting fresh.`);
+            console.error(`[agent] Thread ${threadId} cleared. Starting fresh.`);
           } else {
-            console.error(`[agent] Thread ${CLI_THREAD_ID} was already empty or didn't exist.`);
+            console.error(`[agent] Thread ${threadId} was already empty or didn't exist.`);
           }
           continue;
         }
 
+        if (slashCommand.command === 'write') {
+          writeEnabled = true;
+          console.error('[agent] Writes enabled for this session (--force).');
+          continue;
+        }
+
+        if (slashCommand.command === 'ask') {
+          writeEnabled = false;
+          console.error('[agent] Writes disabled. Using read-only --mode ask.');
+          continue;
+        }
+
+        if (slashCommand.command === 'target') {
+          const next = slashCommand.args.trim();
+          if (next === '') {
+            console.error('[agent] /target requires a directory');
+            continue;
+          }
+          const resolved = path.isAbsolute(next) ? next : path.resolve(process.cwd(), next);
+          if (!existsSync(resolved)) {
+            console.error(`[agent] Target not found: ${resolved}`);
+            continue;
+          }
+          targetDir = resolved;
+          threadId = targetThreadId(targetDir);
+          console.error(`[agent] Target: ${targetDir}`);
+          console.error(`[agent] Thread: ${threadId}`);
+          continue;
+        }
+
+        if (isConfirmCommand(trimmed) && hasPendingReplLaunch(threadId)) {
+          const pending = consumePendingReplLaunch(threadId);
+          if (pending === undefined) {
+            console.error('[agent] No pending launch (it may have expired).');
+            continue;
+          }
+          console.error('[agent] Launching confirmed panal/Claude task…');
+          try {
+            const launched = await launchConfirmedTask(pending.proposal);
+            console.log(formatLaunchResult(launched));
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[agent] Launch failed: ${message}`);
+          }
+          continue;
+        }
+
+        if (isCancelCommand(trimmed) && hasPendingReplLaunch(threadId)) {
+          cancelPendingReplLaunch(threadId);
+          console.error('[agent] Launch cancelled.');
+          continue;
+        }
+
         if (slashCommand.command === 'threads') {
-          await printThreads(repoRoot);
+          await printThreads(repoRoot, threadId);
           continue;
         }
 
@@ -145,13 +216,19 @@ export async function runRepl(
           repoRoot,
           userPrompt: trimmed,
           debug,
-          threadId: CLI_THREAD_ID,
+          threadId,
+          write: writeEnabled,
           stream: true,
+          ...(targetDir !== undefined ? { targetDir } : {}),
           ...(sessionAttachments.length > 0 ? { attachments: sessionAttachments } : {}),
           onAssistantDelta: withoutSegmentRecaps((text) => {
             liveReply.pushDelta(text);
           }),
         });
+
+        if (result.requiresLaunchConfirmation === true && result.launchProposal !== undefined) {
+          setPendingReplLaunch(threadId, result.launchProposal, threadId);
+        }
 
         writeAgentResult(result, liveReply);
       } catch (error: unknown) {

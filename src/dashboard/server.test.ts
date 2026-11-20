@@ -729,6 +729,82 @@ describe('dashboard POST /api/chat (opt-in)', () => {
   });
 });
 
+describe('dashboard panal launch confirmation', () => {
+  let tmpRoot = '';
+
+  before(async () => {
+    tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'cna-dash-launch-'));
+    await mkdir(path.join(tmpRoot, 'logs'), { recursive: true });
+  });
+
+  after(async () => {
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('NO_debería_lanzar_hasta_Confirmar_y_luego_muestra_run_id', async () => {
+    let launched = 0;
+    const server = createDashboardServer({
+      repoRoot: tmpRoot,
+      chatEnabled: true,
+      dashboardToken: 'test-token',
+      runChatTurn: async () => ({
+        reply: 'I can launch this as a coding-agent task. Nothing runs until you confirm.',
+        stderr: '',
+        exitCode: 0,
+        requiresLaunchConfirmation: true,
+        launchProposal: {
+          agent: 'cursor',
+          mode: 'read-only',
+          timeoutMin: 15,
+          dir: tmpRoot,
+          task: 'review pager',
+        },
+      }),
+      runLaunch: async () => {
+        launched += 1;
+        return {
+          ok: true,
+          runId: '20261007-test',
+          command: 'panal delegate -d x -f y -c cursor -r -t 15m',
+          stdout: 'run id: 20261007-test',
+          stderr: '',
+          exitCode: 0,
+        };
+      },
+    });
+    const baseUrl = await listen(server);
+    try {
+      const chat = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ prompt: '/task review pager' }),
+      });
+      assert.equal(chat.status, 200);
+      const chatText = await chat.text();
+      assert.match(chatText, /requiresLaunchConfirmation/);
+      assert.equal(launched, 0);
+
+      const confirm = await fetch(`${baseUrl}/api/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dashboard-Token': 'test-token',
+        },
+        body: JSON.stringify({ action: 'ok' }),
+      });
+      assert.equal(confirm.status, 200);
+      const confirmText = await confirm.text();
+      assert.equal(launched, 1);
+      assert.match(confirmText, /20261007-test/);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 describe('dashboard token authentication', () => {
   let tmpRoot = '';
 

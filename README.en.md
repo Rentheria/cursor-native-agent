@@ -18,7 +18,7 @@ Personal agent built **100% on top of `cursor-agent`** (Cursor CLI) — markdown
 
 **What is it?** An agent that runs on YOUR Cursor account (your subscription, your billing). The brain is `cursor-agent` (Cursor CLI); this TypeScript package only assembles context (skills + memory) and delegates all reasoning.
 
-**Default model:** **Composer 2.5 Fast** — pinned in `.env.example` via `CURSOR_AGENT_MODEL=composer-2.5-fast` for consistent tone. Remove that line, set it to `auto`, or export your own model with `CURSOR_AGENT_MODEL=<id>` (run `cursor-agent models` to see available IDs) — if empty or missing, cursor-agent uses Auto.
+**Default model:** whatever **cursor-agent** already saved (for example Grok 4.7 High). This wrapper does **not** pass `--model` unless `CURSOR_AGENT_MODEL` is set and not `auto`. Composer is not pinned.
 
 **Quick start in 3 steps:**
 
@@ -103,15 +103,17 @@ npm run agent -- "summarize file MEMORY.md"
 npm run cron:install
 ```
 
-`npm run setup` creates `.env` with safe defaults (Composer 2.5 Fast model, Telegram omitted). If you run with TTY, it asks about workspace path (Auto = `<repo>/workspace`, Custom = absolute or relative path); no-TTY uses Auto silently.
+`npm run setup` creates `.env` with safe defaults (no model pin, Telegram omitted). If you run with TTY, it asks about workspace path (Auto = `<repo>/workspace`, Custom = absolute or relative path); no-TTY uses Auto silently.
 
 **Optional step:** after `npm run setup`, running `npm run cron:install` sets up a cron job that checks repo health every weekday (9:00 AM local time, check-only without spending model). If you configured Telegram, you get a notification when there are errors/warnings; READY ticks stay silent in `logs/cron.log`.
 
 If `cursor-agent` is not in `PATH`, export `CURSOR_AGENT_BIN_PATH` or install it according to the instructions `npm run setup` prints.
 
-**Environment variables:** `npm run setup` creates `.env` automatically with safe defaults (Composer 2.5 Fast, port 3847, chat enabled, workspace in `<repo>/workspace`, Telegram omitted). Shell exports win over the file. To customize, edit `.env` directly or run `npm run onboard` for the interactive flow.
+**Environment variables:** `npm run setup` creates `.env` automatically with safe defaults (no `--model`, port 3847, chat enabled, workspace in `<repo>/workspace`, Telegram omitted). Shell exports win over the file.
 
-**Change model:** the default is Composer 2.5 Fast (`CURSOR_AGENT_MODEL=composer-2.5-fast` in `.env.example`). To use another model, export `CURSOR_AGENT_MODEL=<id>` in the shell or edit it in `.env`. Set it to `auto` or leave it empty for cursor-agent to use Auto (its default without `--model`). List of IDs: `cursor-agent models`.
+**Change model:** leave `CURSOR_AGENT_MODEL` unset so cursor-agent uses its saved default. Pin with `CURSOR_AGENT_MODEL=<id>`, or `auto` for CLI Auto. IDs: `cursor-agent models`.
+
+**Windows + panal:** see the Spanish README sections *Windows (PowerShell 5.1…)* and *Panal / Claude*. Short version: prompt on stdin, newest `versions\*` via `node.exe` (not `.cmd`), `taskkill /T /F` on timeout, writes opt-in (`--write` / `/write`), `--target <dir>` with per-target threads, and panal/Claude launches only after `/ok` (refuse writes on `main`).
 
 Telegram requires mandatory config (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS`) — the bot fails closed without those vars. Configure it with `npm run onboard` or by exporting the vars directly.
 

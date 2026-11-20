@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import {
   CURSOR_AGENT_TIMEOUT_ENV,
   DEFAULT_CURSOR_AGENT_TIMEOUT_MS,
 } from '../lib/constants.js';
+import { killProcessTree } from '../lib/process-tree.js';
 import {
   formatCursorAgentSpawnError,
   resolveCursorAgentInvocation,
@@ -22,6 +23,12 @@ export interface CursorAgentRunResult {
   readonly stderr: string;
   readonly exitCode: number;
 }
+
+export type CursorAgentSpawnFn = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptions,
+) => ChildProcess;
 
 export interface CursorAgentRunOptions {
   readonly prompt: string;
@@ -42,11 +49,16 @@ export interface CursorAgentRunOptions {
   readonly streamJson?: boolean;
   /** Called for each partial assistant text delta (only with `streamJson`). */
   readonly onAssistantDelta?: (text: string) => void;
+  /** Injectable spawn for tests. */
+  readonly spawnImpl?: CursorAgentSpawnFn;
+  /** Injectable process-tree killer for tests. */
+  readonly killImpl?: (pid: number) => void;
 }
 
 /**
- * Invokes `cursor-agent -p "<prompt>"` (plus optional headless flags) and
- * captures stdout/stderr. This is the real Cursor engine — not a mock.
+ * Invokes `cursor-agent -p` and writes the assembled prompt on stdin.
+ * The prompt is never passed as a command-line argument (Windows CreateProcess
+ * caps the full command line at ~32K chars — `spawn ENAMETOOLONG`).
  */
 export async function runCursorAgent(
   promptOrOptions: string | CursorAgentRunOptions,
@@ -56,94 +68,7 @@ export async function runCursorAgent(
       ? { prompt: promptOrOptions }
       : promptOrOptions;
 
-  const args = buildCursorAgentArgs(options, process.env);
-  const invocation = resolveCursorAgentInvocation();
-  const spawnArgs = [...invocation.prefixArgs, ...args];
-  logCursorAgentCall(invocation.command, spawnArgs);
-
-  return await new Promise<CursorAgentRunResult>((resolve, reject) => {
-    const child = spawn(invocation.command, spawnArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
-      cwd: options.cwd,
-      detached: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let lineBuffer = '';
-    let streamResultText = '';
-    let finished = false;
-    
-    const timeoutMs = resolveTimeoutMs(process.env);
-    const timeoutHandle = setTimeout(() => {
-      if (!finished && child.pid !== undefined) {
-        console.error(`[cursor-agent] Timeout after ${String(timeoutMs)}ms, killing process group -${String(child.pid)}`);
-        killProcessGroup(child.pid);
-        finished = true;
-        resolve({
-          stdout: options.streamJson === true ? streamResultText : stdout,
-          stderr: stderr + '\n[cursor-agent wrapper] Timeout: killed process group after ' + String(timeoutMs) + 'ms\n',
-          exitCode: 124,
-        });
-      }
-    }, timeoutMs);
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString('utf8');
-      if (options.streamJson === true) {
-        lineBuffer = consumeStreamJsonChunk(
-          lineBuffer,
-          text,
-          options.onAssistantDelta,
-          (resultText) => {
-            streamResultText = resultText;
-          },
-        );
-      } else {
-        stdout += text;
-      }
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    child.on('error', (error: Error) => {
-      clearTimeout(timeoutHandle);
-      finished = true;
-      reject(
-        new Error(formatCursorAgentSpawnError(invocation.command, error.message), {
-          cause: error,
-        }),
-      );
-    });
-    child.on('close', (code: number | null) => {
-      if (finished) {
-        return;
-      }
-      clearTimeout(timeoutHandle);
-      finished = true;
-      
-      if (child.pid !== undefined) {
-        killProcessGroup(child.pid);
-      }
-      
-      if (options.streamJson === true && lineBuffer.trim() !== '') {
-        consumeStreamJsonChunk(
-          '',
-          `${lineBuffer}\n`,
-          options.onAssistantDelta,
-          (resultText) => {
-            streamResultText = resultText;
-          },
-        );
-      }
-      resolve({
-        stdout: options.streamJson === true ? streamResultText : stdout,
-        stderr,
-        exitCode: code ?? 1,
-      });
-    });
-  });
+  return await runCursorAgentProcess(options);
 }
 
 /**
@@ -154,90 +79,14 @@ export async function runCursorAgentLogged(
   options: CursorAgentRunOptions & { readonly logPath: string },
 ): Promise<CursorAgentRunResult> {
   await mkdir(path.dirname(options.logPath), { recursive: true });
-  const args = buildCursorAgentArgs(options, process.env);
-  const invocation = resolveCursorAgentInvocation();
-  const spawnArgs = [...invocation.prefixArgs, ...args];
-  logCursorAgentCall(invocation.command, spawnArgs);
-
-  return await new Promise<CursorAgentRunResult>((resolve, reject) => {
-    const logStream = createWriteStream(options.logPath, { flags: 'a' });
-    const child = spawn(invocation.command, spawnArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
-      cwd: options.cwd,
-      detached: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let finished = false;
-    
-    const timeoutMs = resolveTimeoutMs(process.env);
-    const timeoutHandle = setTimeout(() => {
-      if (!finished && child.pid !== undefined) {
-        const timeoutMsg = `\n[cursor-agent wrapper] Timeout: killed process group after ${String(timeoutMs)}ms\n`;
-        console.error(`[cursor-agent] Timeout after ${String(timeoutMs)}ms, killing process group -${String(child.pid)}`);
-        logStream.write(timeoutMsg);
-        killProcessGroup(child.pid);
-        finished = true;
-        logStream.end();
-        resolve({
-          stdout,
-          stderr: stderr + timeoutMsg,
-          exitCode: 124,
-        });
-      }
-    }, timeoutMs);
-
-    const append = (chunk: Buffer, target: 'stdout' | 'stderr'): void => {
-      const text = chunk.toString('utf8');
-      if (target === 'stdout') {
-        stdout += text;
-      } else {
-        stderr += text;
-      }
-      logStream.write(text);
-    };
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      append(chunk, 'stdout');
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      append(chunk, 'stderr');
-    });
-    child.on('error', (error: Error) => {
-      clearTimeout(timeoutHandle);
-      finished = true;
-      logStream.end();
-      reject(
-        new Error(formatCursorAgentSpawnError(invocation.command, error.message), {
-          cause: error,
-        }),
-      );
-    });
-    child.on('close', (code: number | null) => {
-      if (finished) {
-        return;
-      }
-      clearTimeout(timeoutHandle);
-      finished = true;
-      
-      if (child.pid !== undefined) {
-        killProcessGroup(child.pid);
-      }
-      
-      logStream.end();
-      resolve({
-        stdout,
-        stderr,
-        exitCode: code ?? 1,
-      });
-    });
-  });
+  return await runCursorAgentProcess(options, options.logPath);
 }
 
+/**
+ * Flags only — the prompt is sent on stdin, never as argv.
+ */
 export function buildCursorAgentArgs(
-  options: CursorAgentRunOptions,
+  options: Omit<CursorAgentRunOptions, 'prompt'> | CursorAgentRunOptions,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
   const args: string[] = [CURSOR_AGENT_PRINT_FLAG];
@@ -260,11 +109,10 @@ export function buildCursorAgentArgs(
   if (model !== undefined) {
     args.push('--model', model);
   }
-  args.push(options.prompt);
   return args;
 }
 
-function resolveModelArg(env: NodeJS.ProcessEnv): string | undefined {
+export function resolveModelArg(env: NodeJS.ProcessEnv): string | undefined {
   const raw = env[CURSOR_AGENT_MODEL_ENV]?.trim();
   if (raw === undefined || raw === '' || raw.toLowerCase() === 'auto') {
     return undefined;
@@ -281,12 +129,133 @@ function resolveTimeoutMs(env: NodeJS.ProcessEnv): number {
   return Number.isNaN(parsed) || parsed <= 0 ? DEFAULT_CURSOR_AGENT_TIMEOUT_MS : parsed;
 }
 
-function killProcessGroup(pid: number): void {
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch (error: unknown) {
-    console.error(`[cursor-agent] Failed to kill process group -${String(pid)}:`, error);
+async function runCursorAgentProcess(
+  options: CursorAgentRunOptions,
+  logPath?: string,
+): Promise<CursorAgentRunResult> {
+  const args = buildCursorAgentArgs(options, process.env);
+  const invocation = resolveCursorAgentInvocation();
+  const spawnArgs = [...invocation.prefixArgs, ...args];
+  logCursorAgentCall(invocation.command, spawnArgs);
+
+  const spawnFn = options.spawnImpl ?? spawn;
+  const kill = options.killImpl ?? killProcessTree;
+  const platform = process.platform;
+
+  return await new Promise<CursorAgentRunResult>((resolve, reject) => {
+    const logStream =
+      logPath !== undefined
+        ? createWriteStream(logPath, { flags: 'a' })
+        : undefined;
+
+    const child = spawnFn(invocation.command, spawnArgs, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: process.env,
+      cwd: options.cwd,
+      detached: platform !== 'win32',
+      windowsHide: true,
+    });
+
+    writePromptToStdin(child, options.prompt);
+
+    let stdout = '';
+    let stderr = '';
+    let lineBuffer = '';
+    let streamResultText = '';
+    let finished = false;
+
+    const timeoutMs = resolveTimeoutMs(process.env);
+    const timeoutHandle = setTimeout(() => {
+      if (finished) {
+        return;
+      }
+      if (child.pid !== undefined) {
+        console.error(
+          `[cursor-agent] Timeout after ${String(timeoutMs)}ms, killing process tree ${String(child.pid)}`,
+        );
+        kill(child.pid);
+      }
+      finished = true;
+      const timeoutMsg = `\n[cursor-agent wrapper] Timeout: killed process tree after ${String(timeoutMs)}ms\n`;
+      logStream?.write(timeoutMsg);
+      logStream?.end();
+      resolve({
+        stdout: options.streamJson === true ? streamResultText : stdout,
+        stderr: stderr + timeoutMsg,
+        exitCode: 124,
+      });
+    }, timeoutMs);
+
+    const onStdout = (chunk: Buffer): void => {
+      const text = chunk.toString('utf8');
+      logStream?.write(text);
+      if (options.streamJson === true) {
+        lineBuffer = consumeStreamJsonChunk(
+          lineBuffer,
+          text,
+          options.onAssistantDelta,
+          (resultText) => {
+            streamResultText = resultText;
+          },
+        );
+      } else {
+        stdout += text;
+      }
+    };
+
+    const onStderr = (chunk: Buffer): void => {
+      const text = chunk.toString('utf8');
+      stderr += text;
+      logStream?.write(text);
+    };
+
+    child.stdout?.on('data', onStdout);
+    child.stderr?.on('data', onStderr);
+    child.on('error', (error: Error) => {
+      clearTimeout(timeoutHandle);
+      finished = true;
+      logStream?.end();
+      reject(
+        new Error(formatCursorAgentSpawnError(invocation.command, error.message), {
+          cause: error,
+        }),
+      );
+    });
+    child.on('close', (code: number | null) => {
+      if (finished) {
+        return;
+      }
+      clearTimeout(timeoutHandle);
+      finished = true;
+      if (options.streamJson === true && lineBuffer.trim() !== '') {
+        consumeStreamJsonChunk(
+          '',
+          `${lineBuffer}\n`,
+          options.onAssistantDelta,
+          (resultText) => {
+            streamResultText = resultText;
+          },
+        );
+      }
+      logStream?.end();
+      resolve({
+        stdout: options.streamJson === true ? streamResultText : stdout,
+        stderr,
+        exitCode: code ?? 1,
+      });
+    });
+  });
+}
+
+export function writePromptToStdin(child: Pick<ChildProcess, 'stdin'>, prompt: string): void {
+  const stdin = child.stdin;
+  if (stdin === null || stdin === undefined) {
+    return;
   }
+  stdin.on('error', () => {
+    // Child may exit before the full prompt is written (EPIPE). Harmless.
+  });
+  stdin.end(prompt, 'utf8');
 }
 
 function consumeStreamJsonChunk(
@@ -318,5 +287,5 @@ function logCursorAgentCall(binary: string, args: string[]): void {
     modelIdx >= 0 && modelIdx + 1 < args.length
       ? ` --model ${args[modelIdx + 1]}`
       : '';
-  console.error(`[cursor-agent] Calling ${binary}${modelArg}`);
+  console.error(`[cursor-agent] Calling ${binary}${modelArg} (prompt via stdin)`);
 }
