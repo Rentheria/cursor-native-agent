@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -16,6 +16,7 @@ import {
   resolveCursorAgentInvocation,
 } from '../lib/resolve-cursor-agent.js';
 import { parseStreamJsonLine } from './stream-json.js';
+import { diag } from '../lib/diag.js';
 
 export interface CursorAgentRunResult {
   readonly stdout: string;
@@ -66,7 +67,8 @@ export async function runCursorAgent(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       cwd: options.cwd,
-      detached: true,
+      detached: process.platform !== 'win32',
+      windowsHide: true,
     });
 
     let stdout = '';
@@ -123,7 +125,7 @@ export async function runCursorAgent(
       clearTimeout(timeoutHandle);
       finished = true;
       
-      if (child.pid !== undefined) {
+      if (process.platform !== 'win32' && child.pid !== undefined) {
         killProcessGroup(child.pid);
       }
       
@@ -165,7 +167,8 @@ export async function runCursorAgentLogged(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       cwd: options.cwd,
-      detached: true,
+      detached: process.platform !== 'win32',
+      windowsHide: true,
     });
 
     let stdout = '';
@@ -222,7 +225,7 @@ export async function runCursorAgentLogged(
       clearTimeout(timeoutHandle);
       finished = true;
       
-      if (child.pid !== undefined) {
+      if (process.platform !== 'win32' && child.pid !== undefined) {
         killProcessGroup(child.pid);
       }
       
@@ -281,11 +284,32 @@ function resolveTimeoutMs(env: NodeJS.ProcessEnv): number {
   return Number.isNaN(parsed) || parsed <= 0 ? DEFAULT_CURSOR_AGENT_TIMEOUT_MS : parsed;
 }
 
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === 'object' && error !== null && 'code' in error;
+}
+
 function killProcessGroup(pid: number): void {
+  if (process.platform === 'win32') {
+    try {
+      spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } catch {
+      // Process cleanup is best effort on Windows.
+    }
+    return;
+  }
+
   try {
     process.kill(-pid, 'SIGKILL');
   } catch (error: unknown) {
-    console.error(`[cursor-agent] Failed to kill process group -${String(pid)}:`, error);
+    if (isNodeError(error) && error.code === 'ESRCH') {
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[cursor-agent] Failed to kill process group -${String(pid)}: ${message}`);
   }
 }
 
@@ -318,5 +342,5 @@ function logCursorAgentCall(binary: string, args: string[]): void {
     modelIdx >= 0 && modelIdx + 1 < args.length
       ? ` --model ${args[modelIdx + 1]}`
       : '';
-  console.error(`[cursor-agent] Calling ${binary}${modelArg}`);
+  diag(`[cursor-agent] Calling ${binary}${modelArg}`);
 }

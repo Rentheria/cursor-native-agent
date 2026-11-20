@@ -9,6 +9,7 @@ import {
   SEMANTIC_TOP_K_ENV,
   SKILLS_DIRECTORY_NAME,
 } from '../lib/constants.js';
+import { diag } from '../lib/diag.js';
 import { resolveSemanticRanker } from '../lib/embeddings/resolve-provider.js';
 import type { SemanticRanker } from '../lib/embeddings/types.js';
 import {
@@ -61,7 +62,7 @@ export async function selectRelevantSkills(
   );
 
   if (exactMatches.length > 0) {
-    console.error(
+    diag(
       `[skills] matched ${exactMatches.length} skill(s) via exact triggers: ${exactMatches.map((s) => s.name).join(', ')}`,
     );
     return exactMatches;
@@ -70,19 +71,19 @@ export async function selectRelevantSkills(
   const env = options.env ?? process.env;
   const enabled = options.enabled ?? isSemanticSkillsEnabled(env);
   if (!enabled || skills.length === 0 || prompt.trim() === '') {
-    console.error('[skills] no exact trigger match and semantic fallback disabled');
+    diag('[skills] no exact trigger match and semantic fallback disabled');
     return [];
   }
 
   const semanticHits = await selectSemanticSkills(prompt, skills, options);
   if (semanticHits.length > 0) {
-    console.error(
+    diag(
       `[skills] matched ${semanticHits.length} skill(s) via semantic fallback: ${semanticHits.map((h) => `${h.skill.name}(${h.score.toFixed(3)})`).join(', ')}`,
     );
     return semanticHits.map((hit) => hit.skill);
   }
 
-  console.error('[skills] no exact or semantic matches found');
+  diag('[skills] no exact or semantic matches found');
   return [];
 }
 

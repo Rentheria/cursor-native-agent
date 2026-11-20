@@ -53,6 +53,7 @@ import {
   parseSlashCommand,
   buildHelpMessage,
 } from '../lib/mentions/index.js';
+import { diag } from '../lib/diag.js';
 
 export type AgentRunner = (options: {
   readonly prompt: string;
@@ -214,17 +215,17 @@ export async function runAgentTurn(
     // Load existing thread context and append user message
     threadContext = await buildThreadContext(repoRoot, effectiveThreadId, 5);
     await appendToThread(repoRoot, effectiveThreadId, 'user', userPrompt);
-    console.error(`[agent] Continuing thread: ${effectiveThreadId}`);
+    diag(`[agent] Continuing thread: ${effectiveThreadId}`);
   } else if (safeMode) {
     // Dashboard/Telegram: create new thread automatically with initial user message
     const newThread = await createThread(repoRoot, userPrompt);
     effectiveThreadId = newThread.id;
-    console.error(`[agent] Created new thread: ${effectiveThreadId}`);
+    diag(`[agent] Created new thread: ${effectiveThreadId}`);
   }
   // CLI (no safeMode, no threadId): stay one-shot, no thread persistence
 
   try {
-    console.error('[agent] Loading skills…');
+    diag('[agent] Loading skills…');
     const skills = await loadAllSkills(repoRoot);
     
     // Check for slash command first
@@ -290,7 +291,7 @@ export async function runAgentTurn(
     
     // Parse @ mentions
     const mentionsResult = await parseMentions(userPrompt, repoRoot);
-    console.error(
+    diag(
       `[agent] @ mentions: ${mentionsResult.mentions.length > 0 ? mentionsResult.mentions.map((m) => m.originalMention).join(', ') : '(none)'}`,
     );
     
@@ -300,7 +301,7 @@ export async function runAgentTurn(
       : await selectRelevantSkills(userPrompt, skills);
     
     if (slashCommand?.skillName !== undefined) {
-      console.error(`[agent] Slash command: /${slashCommand.command} → skill ${slashCommand.skillName}`);
+      diag(`[agent] Slash command: /${slashCommand.command} → skill ${slashCommand.skillName}`);
     }
     
     // If build intent is detected but clarify-build didn't match, inject it manually
@@ -313,7 +314,7 @@ export async function runAgentTurn(
       }
     }
     
-    console.error(
+    diag(
       `[agent] Skills loaded: ${skills.length}; matched: ${
         matchedSkills.map((skill) => skill.name).join(', ') || '(none)'
       }`,
@@ -357,9 +358,9 @@ export async function runAgentTurn(
       return safetyResult;
     }
 
-    console.error('[agent] Loading memory index + relevant details…');
+    diag('[agent] Loading memory index + relevant details…');
     const memory = await loadMemoryForPrompt(repoRoot, userPrompt);
-    console.error(
+    diag(
       `[agent] Memory index entries: ${memory.indexEntries.length}; details loaded: ${
         memory.details.map((detail) => detail.name).join(', ') || '(none)'
       }`,
@@ -367,12 +368,12 @@ export async function runAgentTurn(
 
     let preparedAttachments: PreparedAttachment[] = [];
     if (options.attachments !== undefined && options.attachments.length > 0) {
-      console.error(`[agent] Processing ${String(options.attachments.length)} attachment(s)…`);
+      diag(`[agent] Processing ${String(options.attachments.length)} attachment(s)…`);
       preparedAttachments = await Promise.all(
         options.attachments.map(async (filePath) => {
           try {
             const prepared = await prepareAttachment(filePath);
-            console.error(`[agent] Attached: ${filePath} (${prepared.kind})`);
+            diag(`[agent] Attached: ${filePath} (${prepared.kind})`);
             return prepared;
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
@@ -520,10 +521,10 @@ La confirmación expira en 10 minutos.`;
 
     if (isBuildRequest) {
       await mkdir(workspacePath, { recursive: true });
-      console.error(`[agent] workspace: ${workspacePath}`);
+      diag(`[agent] workspace: ${workspacePath}`);
     }
 
-    console.error('[agent] Calling cursor-agent -p …');
+    diag('[agent] Calling cursor-agent -p …');
     const agentStart = performance.now();
     const result = await runAgent({
       prompt: assembled.finalPrompt,
@@ -599,7 +600,7 @@ async function runDelegatedTurn(params: {
   }
 
   const ref = `worker-${String(Date.now())}`;
-  console.error(`[agent] Dispatching worker ${ref} for subtask: ${subtask}`);
+  diag(`[agent] Dispatching worker ${ref} for subtask: ${subtask}`);
 
   const worker = await params.runWorker({
     ref,
@@ -623,7 +624,7 @@ async function runDelegatedTurn(params: {
     repoRoot: params.repoRoot,
   });
 
-  console.error('[agent] Calling parent cursor-agent to report worker result…');
+  diag('[agent] Calling parent cursor-agent to report worker result…');
   const agentStart = performance.now();
   const result = await params.runAgent({
     prompt: reportPrompt.finalPrompt,
@@ -668,9 +669,9 @@ export async function finalizeAgentStdout(
 ): Promise<string> {
   const { cleanedText, writes } = await applyMemoryWritesFromText(repoRoot, stdout);
   if (writes.length > 0) {
-    console.error(
-      `[memory] Applied ${String(writes.length)} memory write(s) this turn`,
-    );
+    diag(
+       `[memory] Applied ${String(writes.length)} memory write(s) this turn`,
+     );
   }
   
   if (userPrompt !== undefined && writes.length === 0 && isRememberIntent(userPrompt)) {
@@ -688,7 +689,7 @@ export async function finalizeAgentStdout(
         };
         const result = await writeMemoryEntry(repoRoot, input);
         const action = result.detailCreated ? 'created' : 'updated';
-        console.error(`[memory] Auto-persisted: ${result.relativeLink} (${action})`);
+        diag(`[memory] Auto-persisted: ${result.relativeLink} (${action})`);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[memory] Auto-persist failed: ${message}`);
